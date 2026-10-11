@@ -21,7 +21,7 @@ local Library = {
     Options = {}, Flags = {}, Connections = {}, Registry = {}, SearchIndex = {},
     Folder = "ZeroHub", Unloaded = false, OpenPopup = nil,
     CollapseDefault = false, CollapseFile = "ZeroHub/sections.json",
-    Theme = {}, ThemeName = "Zero Hub", ToggleKey = Enum.KeyCode.RightShift,
+    Theme = {}, ThemeName = "Mono", ToggleKey = Enum.KeyCode.RightShift,
     Glow = { Window = false, Element = true }, Opacity = { Card = 1, Window = 1 },
     Gradient = { Accent = false, Angle = 45, Shimmer = false, Window = false },
     Started = os.clock(), DragCards = true,
@@ -396,11 +396,17 @@ local function Palette(bg, panel, element, accent)
         Track = element:Lerp(WHITE, 0.03), Divider = element:Lerp(WHITE, 0.06), Outline = element:Lerp(WHITE, 0.10),
         Text = panel:Lerp(WHITE, 0.92), TextBright = WHITE, SubText = panel:Lerp(WHITE, 0.46), DimText = panel:Lerp(WHITE, 0.40),
         Knob = WHITE, Risky = Color3.fromRGB(232, 150, 60), Danger = Color3.fromRGB(232, 72, 72),
+        Check = (accent.R * 0.299 + accent.G * 0.587 + accent.B * 0.114) > 0.6 and bg or WHITE,
     }
 end
 
 local rgb = Color3.fromRGB
 local PRESETS = {
+    { "Mono", rgb(10, 10, 10), rgb(16, 16, 16), rgb(24, 24, 24), rgb(235, 235, 235), {
+        Text = rgb(240, 240, 240), TextBright = rgb(240, 240, 240), SubText = rgb(140, 140, 140), DimText = rgb(140, 140, 140),
+        Divider = rgb(42, 42, 42), Outline = rgb(42, 42, 42), Track = rgb(24, 24, 24), Field = rgb(24, 24, 24),
+        Hover = rgb(24, 24, 24), Knob = rgb(240, 240, 240), Check = rgb(10, 10, 10), Accent2 = rgb(200, 200, 200),
+    } },
     { "Zero Hub", rgb(13, 11, 9), rgb(21, 17, 15), rgb(31, 24, 23), rgb(247, 123, 51) },
     { "Violet", rgb(12, 10, 20), rgb(18, 16, 28), rgb(14, 12, 24), rgb(138, 121, 231) },
     { "Crimson", rgb(16, 8, 10), rgb(24, 12, 14), rgb(20, 10, 12), rgb(206, 51, 66) },
@@ -408,7 +414,6 @@ local PRESETS = {
     { "Amber", rgb(16, 12, 6), rgb(22, 18, 10), rgb(18, 14, 8), rgb(180, 125, 30) },
     { "Rose", rgb(16, 8, 12), rgb(22, 14, 18), rgb(18, 10, 14), rgb(200, 80, 130) },
     { "Cyan", rgb(6, 14, 16), rgb(10, 20, 22), rgb(8, 18, 20), rgb(40, 160, 175) },
-    { "Mono", rgb(14, 14, 18), rgb(22, 22, 28), rgb(18, 18, 22), rgb(50, 50, 60) },
     { "Midnight", rgb(8, 10, 20), rgb(14, 18, 30), rgb(10, 14, 26), rgb(30, 55, 120) },
     { "OLED", rgb(0, 0, 0), rgb(5, 5, 5), rgb(5, 5, 5), rgb(20, 20, 20) },
     { "Nocturne", rgb(10, 8, 16), rgb(16, 12, 24), rgb(12, 10, 20), rgb(60, 40, 90) },
@@ -423,7 +428,9 @@ local PRESETS = {
 }
 Library.Presets, Library.PresetNames = {}, {}
 for _, p in PRESETS do
-    Library.Presets[p[1]] = Palette(p[2], p[3], p[4], p[5])
+    local pal = Palette(p[2], p[3], p[4], p[5])
+    for k, v in p[6] or {} do pal[k] = v end
+    Library.Presets[p[1]] = pal
     table.insert(Library.PresetNames, p[1])
 end
 
@@ -458,7 +465,7 @@ end
 function Library:SetAccent(color) self:SetThemeColor("Accent", color) end
 function Library:ApplyFullTheme() self:ApplyTheme(self.Theme) end
 
-Library:ApplyTheme("Zero Hub")
+Library:ApplyTheme("Mono")
 
 local function GuiParent()
     local ok, h = pcall(function() return gethui and gethui() end)
@@ -542,6 +549,12 @@ function Library:CreateWindow(Config)
     })
     Corner(W.Main, 10)
     W.Scale = Create("UIScale", { Scale = 1, Parent = W.Main })
+    -- their window shadow: black, transparency 0.55, no spread, 4px down
+    pcall(function()
+        local sh = Instance.new("UIShadow")
+        sh.Color, sh.Transparency, sh.Spread, sh.Offset = Color3.new(0, 0, 0), 0.55, UDim2.new(), UDim2.new(0, 0, 0, 4)
+        sh.Parent = W.Main
+    end)
     W.WindowGradient = Create("UIGradient", { Enabled = false, Rotation = 45, Parent = W.Main })
 
     -- glow and shadow sit behind it (a CanvasGroup clips them, so they're siblings)
@@ -591,17 +604,17 @@ function Library:CreateWindow(Config)
     W.Top = Create("Frame", { Position = UDim2.fromOffset(SIDEBAR, 0), Size = UDim2.new(1, -SIDEBAR, 0, TOPBAR), BackgroundTransparency = 1, Parent = W.Main })
     W.Crumb = Label({ Position = UDim2.fromOffset(14, 0), Size = UDim2.new(1, -160, 1, 0), RichText = true, Text = "", FontFace = FONT.Bold, TextSize = 14, Theme = { TextColor3 = "TextBright" }, Parent = W.Top })
 
-    local search = Create("Frame", { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -14, 0.5, 0), Size = UDim2.fromOffset(160, 26), Theme = { BackgroundColor3 = "Element" }, Parent = W.Top })
-    Corner(search, 6)
-    local searchStroke = Create("UIStroke", { Thickness = 1, Transparency = 0.5, Theme = { Color = "Outline" }, Parent = search })
-    Create("ImageLabel", { Position = UDim2.fromOffset(8, 5), Size = UDim2.fromOffset(16, 16), BackgroundTransparency = 1, Image = Icon("search"), Theme = { ImageColor3 = "SubText" }, Parent = search })
+    local search = Create("Frame", { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -14, 0.5, 0), Size = UDim2.fromOffset(110, 30), Theme = { BackgroundColor3 = "Panel" }, Parent = W.Top })
+    Corner(search, 8)
+    local searchStroke = Create("UIStroke", { Thickness = 1, Transparency = 1, Theme = { Color = "Accent" }, Parent = search })
+    Create("ImageLabel", { Position = UDim2.fromOffset(9, 8), Size = UDim2.fromOffset(14, 14), BackgroundTransparency = 1, Image = Icon("search"), Theme = { ImageColor3 = "SubText" }, Parent = search })
     W.SearchBox = Create("TextBox", {
-        Position = UDim2.fromOffset(30, 0), Size = UDim2.new(1, -38, 1, 0), BackgroundTransparency = 1, Text = "", PlaceholderText = "search...",
+        Position = UDim2.fromOffset(28, 0), Size = UDim2.new(1, -34, 1, 0), BackgroundTransparency = 1, Text = "", PlaceholderText = "search...",
         FontFace = FONT.Regular, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, ClearTextOnFocus = false,
         Theme = { TextColor3 = "TextBright", PlaceholderColor3 = "SubText" }, Parent = search,
     })
-    Connect(W.SearchBox.Focused, function() Tween(searchStroke, { Transparency = 0 }, 0.15); searchStroke.Color = Library.Theme.Accent end)
-    Connect(W.SearchBox.FocusLost, function() Tween(searchStroke, { Transparency = 0.5 }, 0.15); searchStroke.Color = Library.Theme.Outline end)
+    Connect(W.SearchBox.Focused, function() Tween(searchStroke, { Transparency = 0.6 }) end)
+    Connect(W.SearchBox.FocusLost, function() Tween(searchStroke, { Transparency = 1 }) end)
 
     -- ── pages ──
     W.Content = Create("Frame", { Position = UDim2.fromOffset(SIDEBAR, TOPBAR), Size = UDim2.new(1, -SIDEBAR, 1, -TOPBAR), BackgroundTransparency = 1, ClipsDescendants = true, Parent = W.Main })
@@ -908,21 +921,21 @@ function Tab:Select()
     if W.ActiveTab then
         local old = W.ActiveTab
         old.Page.Visible = false
-        Tween(old.Bar, { Size = UDim2.fromOffset(3, 0), BackgroundTransparency = 1 })
+        old.Bar.Size, old.Bar.BackgroundTransparency = UDim2.fromOffset(3, 0), 1
         Library:SetGlow(old.BarGlow, false)
-        Tween(old.Pill, { BackgroundTransparency = 1 })
-        Tween(old.Icon, { ImageColor3 = Library.Theme.SubText })
-        Tween(old.Text, { TextColor3 = Library.Theme.SubText })
+        old.Pill.BackgroundTransparency = 1
+        old.Icon.ImageColor3 = Library.Theme.SubText
+        old.Text.TextColor3 = Library.Theme.SubText
         old.Text.FontFace = FONT.Medium
     end
     W.ActiveTab = self
     self.Page.Visible = true
     self.Pill.BackgroundColor3 = Library.Theme.Element
-    Tween(self.Pill, { BackgroundTransparency = 0 })
-    Tween(self.Bar, { Size = UDim2.fromOffset(3, 18), BackgroundTransparency = 0 })
+    self.Pill.BackgroundTransparency = 0
+    self.Bar.Size, self.Bar.BackgroundTransparency = UDim2.fromOffset(3, 18), 0
     Library:SetGlow(self.BarGlow, true)
-    Tween(self.Icon, { ImageColor3 = Library.Theme.Accent })
-    Tween(self.Text, { TextColor3 = Library.Theme.TextBright })
+    self.Icon.ImageColor3 = Library.Theme.Accent
+    self.Text.TextColor3 = Library.Theme.TextBright
     self.Text.FontFace = FONT.SemiBold
     self.Text.TextColor3 = Library.Theme.TextBright
 
@@ -930,21 +943,8 @@ function Tab:Select()
     W.Crumb.Text = string.format('<font color="rgb(%d,%d,%d)">%s</font>  ›  %s', a.R * 255, a.G * 255, a.B * 255, self.Category.Name, self.Name)
 
     -- fade the page in
-    FadeInPage(self.Page)
 end
 
--- a quick page fade using a transparency sweep on the scrolling frame's children
-function FadeInPage(page)
-    for _, d in page:GetDescendants() do
-        if d:IsA("GuiObject") then
-            local bt = d.BackgroundTransparency
-            if bt < 1 then
-                d.BackgroundTransparency = 1
-                Tween(d, { BackgroundTransparency = bt }, 0.2)
-            end
-        end
-    end
-end
 
 -- the next group goes in whichever column is shorter, so the two columns stay even
 function Tab:NextColumn()
@@ -1148,7 +1148,11 @@ function Tab:AddGroupbox(Name, iconOverride)
 
     G.Card = Create("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, LayoutOrder = self.GroupCount, Theme = { BackgroundColor3 = "Panel" }, Parent = column })
     Corner(G.Card, 8)
-    Create("UIStroke", { Thickness = 1, Transparency = 0.75, Theme = { Color = "Divider" }, Parent = G.Card })
+    pcall(function()
+        local sh = Instance.new("UIShadow")
+        sh.Color, sh.Transparency, sh.Spread, sh.Offset, sh.ZIndex = Color3.new(0, 0, 0), 0.5, UDim2.new(), UDim2.new(), -1
+        sh.Parent = G.Card
+    end)
 
     local head = Create("TextButton", { Size = UDim2.new(1, 0, 0, 34), BackgroundTransparency = 1, AutoButtonColor = false, Text = "", Parent = G.Card })
     Create("ImageLabel", { Position = UDim2.fromOffset(14, 9), Size = UDim2.fromOffset(16, 16), BackgroundTransparency = 1, Image = Icon(iconOverride or GroupIcon(Name)), Theme = { ImageColor3 = "Accent" }, Parent = head })
@@ -1164,7 +1168,7 @@ function Tab:AddGroupbox(Name, iconOverride)
     local function setCollapsed(state, instant)
         G.Collapsed = state
         G.Body.Visible = not state
-        Tween(chevron, { Rotation = state and -90 or 0 }, instant and 0 or 0.18)
+        chevron.Rotation = state and -90 or 0
         local file = ReadCollapse()
         file[self.Name .. "::" .. Name] = state or nil
         SaveCollapse(file)
@@ -1212,7 +1216,7 @@ function Groupbox:AddToggle(Flag, Options)
     local stroke = Create("UIStroke", { Thickness = 1, Transparency = 0.3, Theme = { Color = "Divider" }, Parent = box })
     box.ZIndex = 2
     local boxGlow = Library:AddGlow(box, 0.5)
-    local check = Create("ImageLabel", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(12, 12), BackgroundTransparency = 1, ImageTransparency = 1, Image = Icon("check"), ImageColor3 = Color3.new(1, 1, 1), Parent = box })
+    local check = Create("ImageLabel", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(11, 11), BackgroundTransparency = 1, ImageTransparency = 1, Image = "rbxassetid://93912665739148", Theme = { ImageColor3 = "Check" }, Parent = box })
     Label({ Position = UDim2.fromOffset(24, 0), Size = UDim2.new(1, -24, 1, 0), Text = Options.Text or Flag, FontFace = FONT.Medium, TextSize = 14, Theme = { TextColor3 = "Text" }, Parent = top })
 
     if Options.Description then
@@ -1224,13 +1228,13 @@ function Groupbox:AddToggle(Flag, Options)
         self.Value = v and true or false
         Library.Flags[Flag] = self.Value
         if self.Value then
-            Tween(box, { BackgroundColor3 = Library.Theme.Accent }, 0.15)
-            Tween(check, { ImageTransparency = 0 }, 0.15)
+            box.BackgroundColor3 = Library.Theme.Accent
+            check.ImageTransparency = 0
             stroke.Transparency = 1
             Library:SetGlow(boxGlow, true)
         else
-            Tween(box, { BackgroundColor3 = Library.Theme.Element }, 0.15)
-            Tween(check, { ImageTransparency = 1 }, 0.15)
+            box.BackgroundColor3 = Library.Theme.Element
+            check.ImageTransparency = 1
             stroke.Transparency = 0.3
             Library:SetGlow(boxGlow, false)
         end
@@ -1245,7 +1249,7 @@ function Groupbox:AddToggle(Flag, Options)
 
     function Toggle:HideCheckbox()
         box.Visible = false
-        boxGlow.Visible = false
+        if boxGlow then boxGlow.Enabled = false; Library.Glows[boxGlow] = nil end
         for _, d in top:GetChildren() do
             if d:IsA("TextLabel") then d.Position = UDim2.fromOffset(0, 0) end
         end
@@ -1276,14 +1280,14 @@ function Groupbox:AddSlider(Flag, Options)
     local hasDesc = Options.Description ~= nil
     local holder = Create("Frame", { Size = UDim2.new(1, 0, 0, hasDesc and 52 or 34), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, Parent = self.Body })
     Label({ Size = UDim2.new(0.6, 0, 0, 16), Text = Options.Text or Flag, FontFace = FONT.Medium, TextSize = 14, Theme = { TextColor3 = "Text" }, Parent = holder })
-    local valueLbl = Label({ AnchorPoint = Vector2.new(1, 0), Position = UDim2.fromScale(1, 0), Size = UDim2.new(0.4, 0, 0, 16), Text = "", FontFace = FONT.SemiBold, TextSize = 14, TextXAlignment = Enum.TextXAlignment.Right, Theme = { TextColor3 = "TextBright" }, Parent = holder })
+    local valueLbl = Label({ AnchorPoint = Vector2.new(1, 0), Position = UDim2.fromScale(1, 0), Size = UDim2.new(0.4, 0, 0, 16), Text = "", FontFace = FONT.Regular, TextSize = 14, TextXAlignment = Enum.TextXAlignment.Right, Theme = { TextColor3 = "SubText" }, Parent = holder })
 
     local track = Create("Frame", { Position = UDim2.fromOffset(0, 20), Size = UDim2.new(1, 0, 0, 6), Theme = { BackgroundColor3 = "Track" }, Parent = holder })
     Corner(track, 3)
     local fill = Create("Frame", { Size = UDim2.fromScale(0, 1), Theme = { BackgroundColor3 = "Accent" }, Parent = track })
     Corner(fill, 3)
+    -- the glow stays on the fill, so only the filled part lights up
     local fillGlow = Library:AddGlow(fill, 0.5)
-    fillGlow.Parent = track
     local knob = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0, 0.5), Size = UDim2.fromOffset(12, 12), Theme = { BackgroundColor3 = "Knob" }, ZIndex = 3, Parent = track })
     Corner(knob, 6)
     Library:SetGlow(fillGlow, true)
@@ -1321,7 +1325,7 @@ function Groupbox:AddSlider(Flag, Options)
         if sliding and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then moveTo(i.Position.X) end
     end)
     Connect(UserInputService.InputEnded, function(i)
-        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then if sliding then Tween(knob, { Size = UDim2.fromOffset(12, 12) }, 0.1) end sliding = false end
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then if sliding then knob.Size = UDim2.fromOffset(12, 12) end sliding = false end
     end)
 
     Library.Options[Flag] = Slider
@@ -1414,7 +1418,7 @@ function Groupbox:AddDropdown(Flag, Options)
     function Dropdown:Toggle(state)
         self.Open = state == nil and not self.Open or state
         list.Visible = self.Open
-        Tween(arrow, { Rotation = self.Open and 180 or 0 }, 0.18)
+        arrow.Rotation = self.Open and 180 or 0
         if self.Open then Library:ClosePopup(self); Library.OpenPopup = self end
     end
     function Dropdown:_fire()
@@ -1505,8 +1509,8 @@ function Groupbox:AddButton(Options)
     local last = 0
     Connect(btn.MouseButton1Click, function()
         if Options.DoubleClick and os.clock() - last > 0.4 then last = os.clock(); btn.Text = "Are you sure?"; task.delay(1, function() btn.Text = Options.Text or "Button" end); return end
-        Tween(btn, { BackgroundColor3 = Library.Theme.Accent }, 0.08)
-        task.delay(0.1, function() Tween(btn, { BackgroundColor3 = Library.Theme.Element }, 0.12) end)
+        btn.BackgroundColor3 = Library.Theme.Accent
+        task.delay(0.08, function() btn.BackgroundColor3 = Library.Theme.Element end)
         if Options.Func then pcall(Options.Func) end
         if Options.Callback then pcall(Options.Callback) end
     end)
