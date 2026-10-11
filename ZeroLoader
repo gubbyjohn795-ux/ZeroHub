@@ -810,6 +810,139 @@ function Library:SetMobileButton(on, W)
     self.MobileGui.Enabled = true
 end
 
+-- ═══════════════════════════════════════════════════════════
+-- WEATHER (snow or rain drifting inside the window or over the screen)
+-- ═══════════════════════════════════════════════════════════
+Library.WeatherCfg = { Kind = "Off", Area = "Inside UI", Amount = 100, Size = 100 }
+function Library:SetWeather(cfg)
+    for k, v in cfg do self.WeatherCfg[k] = v end
+    local c, W = self.WeatherCfg, self.Window
+    if self.WeatherLayer then self.WeatherLayer:Destroy() self.WeatherLayer = nil end
+    self.WeatherRun = (self.WeatherRun or 0) + 1
+    if c.Kind == "Off" or not W then return end
+    local inside = c.Area == "Inside UI"
+    local layer = Create("Frame", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ClipsDescendants = true, ZIndex = 40, Parent = inside and W.Main or W.Gui })
+    self.WeatherLayer = layer
+    local run, rain = self.WeatherRun, c.Kind == "Rain"
+    task.spawn(function()
+        while self.WeatherRun == run and layer.Parent do
+            local size = (rain and 2 or 4) * c.Size / 100
+            local drop = Create("Frame", {
+                Position = UDim2.new(math.random(), 0, 0, -12), Size = UDim2.fromOffset(size, rain and size * 7 or size),
+                BorderSizePixel = 0, BackgroundTransparency = rain and 0.55 or 0.25, ZIndex = 41, Theme = { BackgroundColor3 = "Text" }, Parent = layer,
+            })
+            if not rain then Corner(drop, 99) end
+            local fall = rain and math.random(70, 110) / 100 or math.random(400, 700) / 100
+            Tween(drop, { Position = UDim2.new(drop.Position.X.Scale + (rain and -0.04 or (math.random() - 0.5) * 0.08), 0, 1, 12) }, fall, Enum.EasingStyle.Linear)
+            task.delay(fall, function() drop:Destroy() end)
+            task.wait((rain and 0.03 or 0.12) * 100 / math.max(c.Amount, 1))
+        end
+    end)
+end
+
+-- ═══════════════════════════════════════════════════════════
+-- WALLPAPER · ICON · PATTERN
+-- ═══════════════════════════════════════════════════════════
+function Library:SetWallpaper(url, dim)
+    local W = self.Window
+    if not W then return end
+    if url == false then
+        if W.Wallpaper then W.Wallpaper:Destroy() W.Wallpaper = nil end
+        return
+    end
+    if url and url ~= "" then
+        if not W.Wallpaper then
+            W.Wallpaper = Create("ImageLabel", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ScaleType = Enum.ScaleType.Crop, ZIndex = 0, Parent = W.Main })
+            Corner(W.Wallpaper, 10)
+            W.WallDim = Create("Frame", { Size = UDim2.fromScale(1, 1), BorderSizePixel = 0, ZIndex = 0, Theme = { BackgroundColor3 = "Background" }, Parent = W.Wallpaper })
+            Corner(W.WallDim, 10)
+        end
+        W.Wallpaper.Image = url:match("^%d+$") and ("rbxassetid://" .. url) or url
+    end
+    if W.WallDim and dim then W.WallDim.BackgroundTransparency = 1 - dim end
+end
+
+function Library:SetIcon(url)
+    local W = self.Window
+    if not W then return end
+    if not url or url == "" then
+        if W.IconImage then W.IconImage:Destroy() W.IconImage = nil end
+        W.TitleLabel.Position, W.VersionLabel.Position = UDim2.fromOffset(14, 15), UDim2.fromOffset(14, 33)
+        return
+    end
+    if not W.IconImage then
+        W.IconImage = Create("ImageLabel", { Position = UDim2.fromOffset(14, 14), Size = UDim2.fromOffset(34, 34), BackgroundTransparency = 1, ScaleType = Enum.ScaleType.Crop, Parent = W.Sidebar })
+        Corner(W.IconImage, 8)
+    end
+    W.IconImage.Image = url:match("^%d+$") and ("rbxassetid://" .. url) or url
+    W.TitleLabel.Position, W.VersionLabel.Position = UDim2.fromOffset(56, 15), UDim2.fromOffset(56, 33)
+end
+
+Library.PatternCfg = { Kind = "None", Strength = 12 }
+function Library:SetPattern(kind, strength)
+    local c, W = self.PatternCfg, self.Window
+    if kind then c.Kind = kind end
+    if strength then c.Strength = strength end
+    if not W then return end
+    if W.Pattern then W.Pattern:Destroy() W.Pattern = nil end
+    if c.Kind == "None" then return end
+    local layer = Create("Frame", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ClipsDescendants = true, ZIndex = 0, Parent = W.Main })
+    W.Pattern = layer
+    local a, step = 1 - c.Strength / 100 * 0.6, 24
+    local size = W.Main.AbsoluteSize
+    if c.Kind == "Grid" then
+        for x = 0, size.X, step do Create("Frame", { Position = UDim2.fromOffset(x, 0), Size = UDim2.new(0, 1, 1, 0), BorderSizePixel = 0, BackgroundTransparency = a, Theme = { BackgroundColor3 = "Divider" }, Parent = layer }) end
+        for y = 0, size.Y, step do Create("Frame", { Position = UDim2.fromOffset(0, y), Size = UDim2.new(1, 0, 0, 1), BorderSizePixel = 0, BackgroundTransparency = a, Theme = { BackgroundColor3 = "Divider" }, Parent = layer }) end
+    else
+        for x = step / 2, size.X, step do
+            for y = step / 2, size.Y, step do
+                local dot = Create("Frame", { Position = UDim2.fromOffset(x, y), Size = UDim2.fromOffset(2, 2), BorderSizePixel = 0, BackgroundTransparency = a, Theme = { BackgroundColor3 = "Divider" }, Parent = layer })
+                Corner(dot, 1)
+            end
+        end
+    end
+end
+
+-- ═══════════════════════════════════════════════════════════
+-- YOUR THEMES (saved colour sets that show up in Preset)
+-- ═══════════════════════════════════════════════════════════
+Library.UserThemeFile = "ZeroHub/themes.json"
+local function readThemes()
+    local raw = SafeFile(readfile, Library.UserThemeFile)
+    local ok, t = pcall(function() return HttpService:JSONDecode(raw) end)
+    return ok and type(t) == "table" and t or {}
+end
+local function packTheme(theme)
+    local out = {}
+    for k, v in theme do if typeof(v) == "Color3" then out[k] = { v.R, v.G, v.B } end end
+    return out
+end
+function Library:SaveUserTheme(name)
+    local all = readThemes()
+    all[name] = packTheme(self.Theme)
+    pcall(writefile, self.UserThemeFile, HttpService:JSONEncode(all))
+    self:LoadUserThemes()
+end
+function Library:DeleteUserTheme(name)
+    local all = readThemes()
+    if not all[name] then return false end
+    all[name] = nil
+    pcall(writefile, self.UserThemeFile, HttpService:JSONEncode(all))
+    self.Presets[name] = nil
+    local i = table.find(self.PresetNames, name)
+    if i then table.remove(self.PresetNames, i) end
+    return true
+end
+function Library:LoadUserThemes()
+    for name, packed in readThemes() do
+        local t = {}
+        for k, v in packed do t[k] = Color3.new(v[1], v[2], v[3]) end
+        self.Presets[name] = t
+        if not table.find(self.PresetNames, name) then table.insert(self.PresetNames, name) end
+    end
+end
+Library:LoadUserThemes()
+
 function Library:OnUnload(fn)
     self.UnloadCallbacks = self.UnloadCallbacks or {}
     table.insert(self.UnloadCallbacks, fn)
@@ -1795,13 +1928,17 @@ function Library:CreateSettingsTab(W)
     menu:AddToggle("_ZeroWatermark", { Text = "Watermark", Default = true, Callback = function(v) Library:SetWatermark(v, W.Config.Title, W.Config.GameName) end })
     menu:AddToggle("_ZeroMobileToggle", { Text = "Mobile toggle button", Default = false, Callback = function(v) Library:SetMobileButton(v, W) end })
     menu:AddToggle("_ZeroDimBackground", { Text = "Dim background", Default = false, Callback = function(v) W:SetDimBackground(v) end })
+    menu:AddDropdown("_ZeroWeather", { Text = "Weather", Values = { "Off", "Snow", "Rain" }, Default = "Off", Callback = function(v) Library:SetWeather({ Kind = v }) end })
+    menu:AddDropdown("_ZeroWeatherArea", { Text = "Weather area", Values = { "Inside UI", "Full screen" }, Default = "Inside UI", Callback = function(v) Library:SetWeather({ Area = v }) end })
+    menu:AddSlider("_ZeroWeatherAmount", { Text = "Weather amount", Min = 10, Max = 200, Default = 100, Suffix = "%", Callback = function(v) Library:SetWeather({ Amount = v }) end })
+    menu:AddSlider("_ZeroWeatherSize", { Text = "Weather size", Min = 50, Max = 200, Default = 100, Suffix = "%", Callback = function(v) Library:SetWeather({ Size = v }) end })
     menu:AddToggle("_ZeroDragCards", { Text = "Draggable cards", Default = true, Callback = function(v) Library.DragCards = v end })
+    menu:AddToggle("_ZeroCollapseSidebar", { Text = "Collapse sidebar", Default = false, Callback = function(v)
+        for _, c in W.Categories do c:SetCollapsed(v) end
+    end })
     menu:AddButton({ Text = "Reset card layout", Func = function()
         pcall(delfile, Library.LayoutFile)
         Library:Notify({ Title = "Menu", Description = "Card layout reset. Reload to see it." })
-    end })
-    menu:AddToggle("_ZeroCollapseSidebar", { Text = "Collapse sidebar", Default = false, Callback = function(v)
-        for _, c in W.Categories do c:SetCollapsed(v) end
     end })
     menu:AddToggle("_ZeroAutoScale", { Text = "Auto scale to screen", Default = false, Callback = function(v)
         if not v then return W:SetScale(Library.Flags._ZeroUIScale or 1) end
@@ -1840,13 +1977,43 @@ function Library:CreateSettingsTab(W)
         end
     end })
 
-    -- ── Colors (every surface, editable) ──
-    local colors = tab:AddGroupbox("Colors", "palette")
+    -- colour rows sit inside Theme, the way theirs does
+    th:AddDivider()
     for _, row in { { "Background", "Background" }, { "Panel", "Panel" }, { "Element", "Element" }, { "Hover", "Hover" },
         { "Outline", "Outline" }, { "Accent", "Accent" }, { "Accent 2", "Accent2" }, { "Text", "Text" },
         { "DimText", "DimText" }, { "Risky", "Risky" } } do
-        colors:AddColorPicker("_ZeroColor_" .. row[2], { Text = row[1], Default = Library.Theme[row[2]], Callback = function(c) Library:SetThemeColor(row[2], c) end })
+        th:AddColorPicker("_ZeroColor_" .. row[2], { Text = row[1], Default = Library.Theme[row[2]], Callback = function(c) Library:SetThemeColor(row[2], c) end })
     end
+
+    th:AddSectionLabel("wallpaper")
+    th:AddInput("_ZeroWallpaperURL", { Text = "", Placeholder = "image url or rbxassetid://..." })
+    th:AddSlider("_ZeroWallpaperDim", { Text = "Wallpaper dim", Min = 0, Max = 1, Default = 0.7, Decimals = 2, Callback = function(v) Library:SetWallpaper(nil, v) end })
+    th:AddButtonRow({ Text = "Apply wallpaper", Func = function() Library:SetWallpaper(Library.Flags._ZeroWallpaperURL, Library.Flags._ZeroWallpaperDim) end },
+        { Text = "Clear", Func = function() Library:SetWallpaper(false) end })
+
+    th:AddSectionLabel("icon")
+    th:AddInput("_ZeroIconURL", { Text = "", Placeholder = "image url or rbxassetid://..." })
+    th:AddButtonRow({ Text = "Apply icon", Func = function() Library:SetIcon(Library.Flags._ZeroIconURL) end },
+        { Text = "Reset", Func = function() Library:SetIcon(nil) end })
+
+    th:AddSectionLabel("pattern")
+    th:AddDropdown("_ZeroPattern", { Text = "Pattern", Values = { "None", "Grid", "Dots" }, Default = "None", Callback = function(v) Library:SetPattern(v) end })
+    th:AddSlider("_ZeroPatternStrength", { Text = "Pattern strength", Min = 0, Max = 100, Default = 12, Suffix = "%", Callback = function(v) Library:SetPattern(nil, v) end })
+
+    th:AddSectionLabel("your themes")
+    th:AddInput("_ZeroThemeName", { Text = "", Placeholder = "theme name" })
+    local presetDrop = Library.Options._ZeroTheme
+    th:AddButtonRow({ Text = "Create", Func = function()
+        local n = Library.Flags._ZeroThemeName
+        if not n or n == "" then return Library:Notify({ Title = "Theme", Description = "Type a theme name first." }) end
+        Library:SaveUserTheme(n)
+        presetDrop:SetValues(Library.PresetNames)
+        Library:Notify({ Title = "Theme", Description = "Saved " .. n .. ". Pick it in Preset." })
+    end }, { Text = "Delete", Color = "Risky", Func = function()
+        local n = Library.Flags._ZeroThemeName
+        if n and Library:DeleteUserTheme(n) then presetDrop:SetValues(Library.PresetNames); Library:Notify({ Title = "Theme", Description = "Deleted " .. n }) end
+    end })
+    th:AddLabel("Create saves the colours on screen under the name; pick it in Preset to use it.")
 
     Library:SetWatermark(true, W.Config.Title, W.Config.GameName)
     return tab
