@@ -35,12 +35,36 @@ local function Connect(signal, fn)
     return c
 end
 
--- measured off BigFroot: a hover fade runs ~0.12s on an Exponential Out curve
+-- their Library.Animation default: 0.18s Quart Out
 local function Tween(obj, props, t, style, dir)
-    local tw = TweenService:Create(obj, TweenInfo.new(t or 0.12, style or Enum.EasingStyle.Exponential, dir or Enum.EasingDirection.Out), props)
+    local tw = TweenService:Create(obj, TweenInfo.new(t or 0.18, style or Enum.EasingStyle.Quart, dir or Enum.EasingDirection.Out), props)
     tw:Play()
     return tw
 end
+
+-- curves measured off BigFroot frame by frame
+local EASE = {
+    Hover = { 0.1, Enum.EasingStyle.Quart },          -- their Hover(): 0.1s on the default curve
+    Check = { 0.085, Enum.EasingStyle.Circular },     -- the tick fading in and out
+    Collapse = { 0.2, Enum.EasingStyle.Quint },       -- their Fold(): card height
+    Drop = { 0.12, Enum.EasingStyle.Quart },          -- dropdown list growing open
+    Appear = { 0.16, Enum.EasingStyle.Quart },        -- their Appear(): popups scale 0.95 -> 1
+    Pop = { 0.18, Enum.EasingStyle.Back },            -- their Pop(): scale 0.85 -> 1 with overshoot
+    Bar = { 0.07, Enum.EasingStyle.Quad },            -- nav bar settling 26 -> 18 after a 0.15s hold
+    Nudge = { 0.05, Enum.EasingStyle.Quad },          -- page sliding up its last 2px
+}
+local function Ease(obj, props, kind)
+    local e = EASE[kind]
+    return Tween(obj, props, e[1], e[2])
+end
+
+local function ScaleIn(obj, from, kind)
+    local sc = obj:FindFirstChildOfClass("UIScale") or Instance.new("UIScale", obj)
+    sc.Scale = from
+    return Ease(sc, { Scale = 1 }, kind)
+end
+local function Appear(obj) return ScaleIn(obj, 0.95, "Appear") end
+local function Pop(obj) return ScaleIn(obj, 0.85, "Pop") end
 
 local function Themed(obj, props)
     Library.Registry[obj] = props
@@ -72,8 +96,9 @@ function Library:AddGlow(target, strength)
     local shadow = Instance.new("UIShadow")
     shadow.Color = self.Theme.Accent
     shadow.Transparency = strength or 0.5
-    shadow.Spread = UDim2.new(0, 1, 0, 1)
+    shadow.Spread = UDim2.fromOffset(1, 1)
     shadow.Offset = UDim2.new()
+    pcall(function() shadow.BlurRadius = UDim.new(0, 8) end)
     shadow.ZIndex = -1
     shadow.Enabled = false
     shadow.Parent = target
@@ -380,59 +405,110 @@ local ICONS = {
     ["x-square"]=10747384217,["zoom-in"]=10747384552,["zoom-out"]=10747384679,
 }
 
+-- BigFroot's own icon set (185), read live off their library; Lucide fills any name it lacks
+local BF_ICONS = {
+    ["at-sign"]=78418522232697,["atom"]=78103215225310,["award"]=108634972828842,["axe"]=86796167900966,
+    ["banknote"]=97712788489732,["battery"]=117403242776164,["beaker"]=95721610600008,["bell"]=123130994927055,
+    ["bell-ring"]=88427421268311,["binoculars"]=131891142101954,["biohazard"]=126479797612283,
+    ["bird"]=133422138891768,["bolt"]=78903857382511,["bomb"]=72916572327175,["bone"]=72210323414819,
+    ["book"]=109205447311687,["bookmark"]=137563418751591,["bookmark-check"]=105215459770256,["bot"]=133773993429564,
+    ["bot-message-square"]=92510063370273,["box"]=120480840237346,["brain"]=105420065001352,["brush"]=109102738561528,
+    ["bug"]=84630028414530,["calendar"]=85791777900932,["camera"]=98791383245014,["car"]=99033543071984,
+    ["carrot"]=100708867595226,["cat"]=105691245931464,["chart-bar"]=83919178800535,["check"]=93912665739148,
+    ["chevron-down"]=117180161825809,["chevron-left"]=107604297971776,["chevron-right"]=88401619016130,
+    ["chevron-up"]=120324504951286,["circle"]=92423141538813,["circle-alert"]=72204937258553,
+    ["circle-check"]=138308485898114,["circle-x"]=88505630454141,["clock"]=74192896732547,["cloud"]=111761273650799,
+    ["code"]=113882494754985,["cog"]=129338365599931,["coins"]=131492848525143,["compass"]=128758269076563,
+    ["copy"]=135359646165693,["cpu"]=120741046380530,["crosshair"]=87144352307029,["crown"]=82713747993935,
+    ["database"]=77906713484125,["diamond"]=70536521161980,["dna"]=87098324609177,["dog"]=91021448477196,
+    ["dollar-sign"]=102739438416112,["download"]=91190904673424,["droplet"]=112500146951160,["egg"]=92869984203563,
+    ["expand"]=93460837745017,["external-link"]=101006435522145,["eye"]=111545834461192,["eye-off"]=101937481624072,
+    ["feather"]=125673395695280,["file"]=130100423122751,["file-text"]=137500879695259,["fish"]=111021382463121,
+    ["flag"]=138855044839618,["flame"]=100387296039230,["flask-conical"]=136034291975821,["folder"]=74468149216972,
+    ["folder-open"]=113494038068082,["footprints"]=103201682357056,["gamepad-2"]=126074969556515,
+    ["gem"]=119885288633197,["ghost"]=106328952657518,["gift"]=132134867818905,["globe"]=92212450589588,
+    ["grid-3x3"]=89460097852620,["hammer"]=115289920652097,["hand"]=89365086107053,["hash"]=114460545628916,
+    ["heart"]=86002618026030,["hexagon"]=88140530555239,["hourglass"]=104912162909967,["house"]=76201794045889,
+    ["image"]=95363568397236,["info"]=126633647239092,["key"]=78619442115317,["keyboard"]=119681778821452,
+    ["layers"]=79332487729164,["layout-grid"]=98214291143480,["leaf"]=139655802207519,["lightbulb"]=139512613040907,
+    ["link"]=91337265184176,["list"]=74855969717709,["list-checks"]=118587692416092,["lock"]=94511696014400,
+    ["lock-open"]=128126709887118,["log-out"]=127867064657395,["mail"]=115764997219328,["map"]=127720087698836,
+    ["map-pin"]=126788232088520,["maximize"]=92485191441668,["medal"]=91602036256176,["menu"]=96553995054331,
+    ["message-square"]=92352931885730,["minimize"]=110869105682492,["minus"]=94928568214894,
+    ["monitor"]=93735049249369,["moon"]=95605220866206,["mountain"]=114300302118999,["move"]=73317711159234,
+    ["package"]=127438198290074,["palette"]=105984703621000,["paperclip"]=92969482157307,["pause"]=102843309361702,
+    ["paw-print"]=79059077917448,["pen"]=138938001027671,["pencil"]=99130927275468,["percent"]=78193906698640,
+    ["pickaxe"]=133350386368964,["pin"]=78109602187276,["plane"]=134159558852449,["play"]=109039889229614,
+    ["plug"]=119221521225617,["plus"]=125345744382215,["power"]=131204589299088,["rabbit"]=121213289937806,
+    ["radar"]=85583617626084,["radio"]=103806019687604,["refresh-cw"]=95894749312708,["repeat"]=122955941776080,
+    ["rocket"]=106868089574304,["rotate-cw"]=96685576109168,["route"]=123164379741812,["ruler"]=80045876562573,
+    ["save"]=112400162486605,["scissors"]=96106454041019,["search"]=91945241943601,["send"]=89165624169656,
+    ["server"]=137536208031314,["settings"]=133220441796193,["share"]=89333562969581,["shield"]=129838924496395,
+    ["shopping-bag"]=95775696224261,["shopping-cart"]=127259338256299,["shrink"]=80803757494361,
+    ["shuffle"]=128461116448337,["skull"]=138085898063966,["sliders-horizontal"]=123876321379439,
+    ["smartphone"]=133870842381885,["sparkles"]=136365218255099,["sprout"]=75388739294352,["square"]=107410263353142,
+    ["star"]=101421323940034,["store"]=93780860756380,["sun"]=140556911959904,["sword"]=105666445812762,
+    ["swords"]=101454174088778,["tag"]=114719284818322,["target"]=135691454830657,["tent"]=74053747774277,
+    ["terminal"]=126365458678145,["text-cursor-input"]=83698332720549,["timer"]=96981369974177,
+    ["toggle-left"]=79894766189051,["toggle-right"]=119121099775136,["tractor"]=140349038560814,
+    ["trash"]=140189920092418,["trash-2"]=117439689014882,["tree-pine"]=121402972915975,["triangle"]=113045437221704,
+    ["triangle-alert"]=124509031427373,["trophy"]=98289898073039,["type"]=100309040972104,["upload"]=129663480759945,
+    ["user"]=115081745706227,["users"]=115802506829292,["wallet"]=84143083304675,["waves"]=107404960582027,
+    ["wheat"]=111876932207712,["wifi"]=116858464331400,["wind"]=118479244779346,["wrench"]=106930984915712,
+    ["x"]=77236530693648,["zap"]=124496590373771,
+}
+local ICON_ALIAS = { home = "house", ["bar-chart"] = "chart-bar", sliders = "sliders-horizontal", ["layout-dashboard"] = "layout-grid", ["alert-triangle"] = "triangle-alert" }
 local function Icon(name)
     if type(name) == "number" then return "rbxassetid://" .. name end
     if type(name) == "string" and name:find("rbxassetid://") then return name end
-    local id = ICONS[name or ""]
+    name = name or ""
+    local id = BF_ICONS[name] or BF_ICONS[ICON_ALIAS[name] or ""] or ICONS[name]
     return id and ("rbxassetid://" .. id) or ""
 end
 
--- ── themes: Zero Hub first, every Ethos preset after it ──
+-- ── themes: BigFroot's fifteen, Mono first and default ──
 local WHITE = Color3.new(1, 1, 1)
-local function Palette(bg, panel, element, accent)
+local function Palette(c)
+    local bright = (c.Accent.R * 0.299 + c.Accent.G * 0.587 + c.Accent.B * 0.114) > 0.6
     return {
-        Background = bg, Panel = panel, Element = element, Accent = accent,
-        Accent2 = accent:Lerp(WHITE, 0.25), Hover = element:Lerp(WHITE, 0.07), Field = element,
-        Track = element:Lerp(WHITE, 0.03), Divider = element:Lerp(WHITE, 0.06), Outline = element:Lerp(WHITE, 0.10),
-        Text = panel:Lerp(WHITE, 0.92), TextBright = WHITE, SubText = panel:Lerp(WHITE, 0.46), DimText = panel:Lerp(WHITE, 0.40),
-        Knob = WHITE, Risky = Color3.fromRGB(232, 150, 60), Danger = Color3.fromRGB(232, 72, 72),
-        Check = (accent.R * 0.299 + accent.G * 0.587 + accent.B * 0.114) > 0.6 and bg or WHITE,
+        Background = c.Background, Panel = c.Panel, Element = c.Element, Hover = c.Hover, Outline = c.Outline,
+        Accent = c.Accent, Accent2 = c.Accent2, Text = c.Text, DimText = c.DimText, Risky = c.Risky,
+        Field = c.Element, Track = c.Element, Divider = c.Outline, TextBright = c.Text, SubText = c.DimText,
+        Knob = c.Text, Danger = c.Risky, Check = bright and c.Background or WHITE,
     }
 end
 
 local rgb = Color3.fromRGB
-local PRESETS = {
-    { "Mono", rgb(10, 10, 10), rgb(16, 16, 16), rgb(24, 24, 24), rgb(235, 235, 235), {
-        Text = rgb(240, 240, 240), TextBright = rgb(240, 240, 240), SubText = rgb(140, 140, 140), DimText = rgb(140, 140, 140),
-        Divider = rgb(42, 42, 42), Outline = rgb(42, 42, 42), Track = rgb(24, 24, 24), Field = rgb(24, 24, 24),
-        Hover = rgb(24, 24, 24), Knob = rgb(240, 240, 240), Check = rgb(10, 10, 10), Accent2 = rgb(200, 200, 200),
-    } },
-    { "Zero Hub", rgb(13, 11, 9), rgb(21, 17, 15), rgb(31, 24, 23), rgb(247, 123, 51) },
-    { "Violet", rgb(12, 10, 20), rgb(18, 16, 28), rgb(14, 12, 24), rgb(138, 121, 231) },
-    { "Crimson", rgb(16, 8, 10), rgb(24, 12, 14), rgb(20, 10, 12), rgb(206, 51, 66) },
-    { "Emerald", rgb(8, 14, 10), rgb(12, 20, 14), rgb(10, 18, 12), rgb(40, 150, 70) },
-    { "Amber", rgb(16, 12, 6), rgb(22, 18, 10), rgb(18, 14, 8), rgb(180, 125, 30) },
-    { "Rose", rgb(16, 8, 12), rgb(22, 14, 18), rgb(18, 10, 14), rgb(200, 80, 130) },
-    { "Cyan", rgb(6, 14, 16), rgb(10, 20, 22), rgb(8, 18, 20), rgb(40, 160, 175) },
-    { "Midnight", rgb(8, 10, 20), rgb(14, 18, 30), rgb(10, 14, 26), rgb(30, 55, 120) },
-    { "OLED", rgb(0, 0, 0), rgb(5, 5, 5), rgb(5, 5, 5), rgb(20, 20, 20) },
-    { "Nocturne", rgb(10, 8, 16), rgb(16, 12, 24), rgb(12, 10, 20), rgb(60, 40, 90) },
-    { "Obsidian", rgb(6, 6, 8), rgb(12, 12, 14), rgb(10, 10, 12), rgb(30, 30, 35) },
-    { "Petrol", rgb(6, 12, 14), rgb(10, 18, 22), rgb(8, 16, 20), rgb(20, 80, 90) },
-    { "Pine", rgb(8, 14, 10), rgb(12, 20, 14), rgb(10, 18, 12), rgb(30, 80, 45) },
-    { "Frost", rgb(8, 12, 16), rgb(14, 18, 24), rgb(10, 15, 22), rgb(100, 160, 200) },
-    { "Sakura", rgb(16, 10, 14), rgb(24, 16, 20), rgb(20, 12, 16), rgb(230, 140, 170) },
-    { "Neon", rgb(4, 10, 6), rgb(8, 16, 12), rgb(6, 14, 10), rgb(0, 255, 140) },
-    { "Cobalt", rgb(6, 8, 18), rgb(12, 14, 28), rgb(10, 12, 24), rgb(60, 90, 220) },
-    { "Rust", rgb(14, 8, 6), rgb(22, 14, 10), rgb(18, 10, 8), rgb(160, 70, 40) },
+-- every value read off their live library. their BigFroot theme ships as Zero Hub
+local THEMES = {
+    { "Mono",     { 10,10,10 },   { 16,16,16 },   { 24,24,24 },   { 32,32,32 },   { 42,42,42 },   { 235,235,235 }, { 235,235,235 }, { 240,240,240 }, { 140,140,140 }, { 255,86,86 } },
+    { "Zero Hub", { 14,11,10 },   { 21,17,16 },   { 31,25,23 },   { 41,33,30 },   { 51,41,38 },   { 255,122,48 },  { 255,209,48 },  { 242,236,232 }, { 150,138,132 }, { 255,86,86 } },
+    { "Blue",     { 11,11,14 },   { 17,17,21 },   { 25,25,31 },   { 33,33,41 },   { 40,40,49 },   { 66,133,255 },  { 78,66,255 },   { 236,236,240 }, { 138,138,150 }, { 255,86,86 } },
+    { "Blush",    { 10,10,11 },   { 16,16,18 },   { 25,25,28 },   { 34,34,38 },   { 36,36,40 },   { 240,166,196 }, { 240,167,166 }, { 242,238,240 }, { 138,134,138 }, { 255,86,86 } },
+    { "Crimson",  { 14,10,11 },   { 21,15,17 },   { 31,22,25 },   { 42,30,34 },   { 52,37,42 },   { 230,70,95 },   { 230,112,70 },  { 244,234,236 }, { 152,132,138 }, { 255,150,80 } },
+    { "Ember",    { 12,14,12 },   { 17,20,17 },   { 26,30,26 },   { 35,40,35 },   { 44,50,44 },   { 255,140,0 },   { 255,247,0 },   { 240,243,238 }, { 140,148,138 }, { 255,86,86 } },
+    { "Forest",   { 10,13,10 },   { 15,20,15 },   { 22,30,22 },   { 30,40,30 },   { 38,50,38 },   { 140,210,120 }, { 120,210,138 }, { 234,242,232 }, { 130,150,128 }, { 255,86,86 } },
+    { "Lavender", { 12,11,16 },   { 18,17,24 },   { 27,25,35 },   { 36,33,46 },   { 42,39,54 },   { 178,150,255 }, { 222,150,255 }, { 240,236,246 }, { 140,134,156 }, { 255,86,86 } },
+    { "Lemon",    { 12,12,10 },   { 18,18,15 },   { 27,27,22 },   { 36,36,29 },   { 44,44,36 },   { 245,222,100 }, { 207,245,100 }, { 244,242,232 }, { 148,146,128 }, { 255,86,86 } },
+    { "Midnight", { 8,9,16 },     { 13,15,26 },   { 20,23,38 },   { 28,32,50 },   { 36,40,62 },   { 120,140,255 }, { 157,120,255 }, { 234,236,248 }, { 128,134,168 }, { 255,86,86 } },
+    { "Mint",     { 10,13,12 },   { 16,20,19 },   { 23,29,27 },   { 31,39,36 },   { 38,48,45 },   { 64,224,160 },  { 64,221,224 },  { 232,240,236 }, { 132,150,142 }, { 255,86,86 } },
+    { "Ocean",    { 9,12,15 },    { 14,19,24 },   { 21,28,35 },   { 28,37,46 },   { 34,45,56 },   { 72,200,230 },  { 72,134,230 },  { 232,240,246 }, { 128,146,160 }, { 255,86,86 } },
+    { "Paper",    { 244,244,247 },{ 255,255,255 },{ 236,236,241 },{ 226,226,233 },{ 216,216,224 },{ 236,110,160 }, { 236,113,110 }, { 26,26,30 },    { 118,118,130 }, { 220,60,60 } },
+    { "Peach",    { 14,11,10 },   { 21,17,15 },   { 31,25,22 },   { 41,33,29 },   { 51,41,36 },   { 255,176,140 }, { 255,224,140 }, { 244,238,232 }, { 152,140,130 }, { 255,86,86 } },
+    { "Rose",     { 14,10,12 },   { 21,16,19 },   { 31,23,28 },   { 41,31,37 },   { 51,38,46 },   { 255,92,146 },  { 255,106,92 },  { 242,232,238 }, { 150,132,142 }, { 255,86,86 } },
 }
+local THEME_KEYS = { "Background", "Panel", "Element", "Hover", "Outline", "Accent", "Accent2", "Text", "DimText", "Risky" }
 Library.Presets, Library.PresetNames = {}, {}
-for _, p in PRESETS do
-    local pal = Palette(p[2], p[3], p[4], p[5])
-    for k, v in p[6] or {} do pal[k] = v end
-    Library.Presets[p[1]] = pal
-    table.insert(Library.PresetNames, p[1])
+for _, t in THEMES do
+    local c = {}
+    for i, key in THEME_KEYS do c[key] = rgb(t[i + 1][1], t[i + 1][2], t[i + 1][3]) end
+    Library.Presets[t[1]] = Palette(c)
+    table.insert(Library.PresetNames, t[1])
 end
+
+-- a theme change also re-paints things set by hand (a ticked box, the open tab), not only registered colours
+Library.Refreshers = {}
+function Library:OnThemeRefresh(fn) table.insert(self.Refreshers, fn) end
 
 function Library:ApplyTheme(theme)
     if type(theme) == "string" then
@@ -450,15 +526,16 @@ function Library:ApplyTheme(theme)
             self.Registry[obj] = nil
         end
     end
+    for _, fn in self.Refreshers do pcall(fn) end
     if self.ApplyGlow then self:ApplyGlow() end
     if self.OnThemeChanged then pcall(self.OnThemeChanged) end
 end
 
 function Library:SetThemeColor(key, color)
     self.Theme[key] = color
-    if key == "Element" then self.Theme.Hover, self.Theme.Track, self.Theme.Divider = color:Lerp(WHITE, 0.05), color, color:Lerp(WHITE, 0.05) end
-    if key == "Panel" then self.Theme.Field = color end
-    self:ApplyTheme(self.Theme)
+    local c = {}
+    for _, k in THEME_KEYS do c[k] = self.Theme[k] end
+    self:ApplyTheme(Palette(c))
 end
 
 -- Ethos names kept
@@ -735,6 +812,8 @@ end
 -- ═══════════════════════════════════════════════════════════
 -- WATERMARK
 -- ═══════════════════════════════════════════════════════════
+-- their layout: top centre 14px down, 30 tall, corner 6, 12px padding, 10px gaps.
+-- hub name bold 14 in the accent, the rest regular 14 in DimText, 1x14 Outline separators
 function Library:SetWatermark(on, title, gameName)
     if not on then
         if self.WatermarkGui then self.WatermarkGui.Enabled = false end
@@ -742,19 +821,19 @@ function Library:SetWatermark(on, title, gameName)
     end
     if not self.WatermarkGui then
         self.WatermarkGui = Create("ScreenGui", { Name = HttpService:GenerateGUID(false), IgnoreGuiInset = true, DisplayOrder = 99996, ResetOnSpawn = false, Parent = GuiParent() })
-        local bar = Create("Frame", { Position = UDim2.fromOffset(16, 16), Size = UDim2.fromOffset(10, 28), AutomaticSize = Enum.AutomaticSize.X, Theme = { BackgroundColor3 = "Panel" }, Parent = self.WatermarkGui })
-        Corner(bar, 7)
-        Create("UIStroke", { Thickness = 1, Transparency = 0.5, Theme = { Color = "Outline" }, Parent = bar })
-        local row = Create("Frame", { Size = UDim2.fromScale(0, 1), AutomaticSize = Enum.AutomaticSize.X, BackgroundTransparency = 1, Parent = bar })
-        List(row, 8, Enum.FillDirection.Horizontal, Enum.HorizontalAlignment.Left, Enum.VerticalAlignment.Center)
-        Pad(row, 12, 12, 0, 0)
-        self.WatermarkRow = row
+        local bar = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 14), Size = UDim2.fromOffset(0, 30), AutomaticSize = Enum.AutomaticSize.X, Theme = { BackgroundColor3 = "Panel" }, Parent = self.WatermarkGui })
+        Corner(bar, 6)
+        Pad(bar, 12, 12, 0, 0)
+        List(bar, 10, Enum.FillDirection.Horizontal, Enum.HorizontalAlignment.Left, Enum.VerticalAlignment.Center)
         self.WatermarkBits = {}
+        local order = 0
         local function bit(key, text, accent)
-            local l = Label({ Size = UDim2.fromOffset(0, 28), AutomaticSize = Enum.AutomaticSize.X, Text = text, FontFace = accent and FONT.Bold or FONT.Medium, TextSize = 13, TextYAlignment = Enum.TextYAlignment.Center, LayoutOrder = #self.WatermarkBits * 2, Theme = { TextColor3 = accent and "Accent" or "Text" }, Parent = row })
-            self.WatermarkBits[key] = l
-            Label({ Size = UDim2.fromOffset(1, 14), Text = "", LayoutOrder = #self.WatermarkBits * 2 + 1, BackgroundTransparency = 0, Theme = { BackgroundColor3 = "Divider" }, Parent = row })
-            return l
+            if order > 0 then
+                order += 1
+                Create("Frame", { Size = UDim2.fromOffset(1, 14), BorderSizePixel = 0, LayoutOrder = order, Theme = { BackgroundColor3 = "Outline" }, Parent = bar })
+            end
+            order += 1
+            self.WatermarkBits[key] = Label({ Size = UDim2.fromOffset(0, 30), AutomaticSize = Enum.AutomaticSize.X, Text = text, FontFace = accent and FONT.Bold or FONT.Regular, TextSize = 14, LayoutOrder = order, Theme = { TextColor3 = accent and "Accent" or "DimText" }, Parent = bar })
         end
         bit("title", title or "Zero Hub", true)
         bit("game", gameName or "")
@@ -813,31 +892,78 @@ end
 -- ═══════════════════════════════════════════════════════════
 -- WEATHER (snow or rain drifting inside the window or over the screen)
 -- ═══════════════════════════════════════════════════════════
-Library.WeatherCfg = { Kind = "Off", Area = "Inside UI", Amount = 100, Size = 100 }
+-- per kind, as BigFroot defines it. Count = { whole screen, inside UI }, Time = seconds to cross, Size in px
+local WEATHER = {
+    Snow   = { Count = { 70, 35 }, Time = { 7, 16 } },
+    Rain   = { Count = { 90, 45 }, Time = { 0.45, 0.75 } },
+    Petals = { Count = { 50, 26 }, Time = { 8, 15 }, Drift = 0.18, Spin = 360, Tint = true },
+    Hearts = { Count = { 36, 18 }, Time = { 7, 12 }, Drift = 0.08, Icon = "heart", Size = { 10, 18 }, Rise = true, Tint = true },
+    Stars  = { Count = { 44, 22 }, Time = { 12, 20 }, Drift = 0.04, Icon = "star", Size = { 7, 13 }, Twinkle = true, Tint = true },
+    Leaves = { Count = { 36, 18 }, Time = { 7, 13 }, Drift = 0.22, Icon = "leaf", Size = { 10, 16 }, Spin = 300, Tint = true },
+}
+Library.WeatherKinds = { "Off", "Snow", "Rain", "Petals", "Hearts", "Stars", "Leaves" }
+Library.WeatherCfg = { Kind = "Off", Area = "Inside UI", Amount = 1, Size = 1 }
+
 function Library:SetWeather(cfg)
     for k, v in cfg do self.WeatherCfg[k] = v end
     local c, W = self.WeatherCfg, self.Window
     if self.WeatherLayer then self.WeatherLayer:Destroy() self.WeatherLayer = nil end
     self.WeatherRun = (self.WeatherRun or 0) + 1
-    if c.Kind == "Off" or not W then return end
+    local def = WEATHER[c.Kind]
+    if not def or not W then return end
     local inside = c.Area == "Inside UI"
     local layer = Create("Frame", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ClipsDescendants = true, ZIndex = 40, Parent = inside and W.Main or W.Gui })
     self.WeatherLayer = layer
-    local run, rain = self.WeatherRun, c.Kind == "Rain"
-    task.spawn(function()
-        while self.WeatherRun == run and layer.Parent do
-            local size = (rain and 2 or 4) * c.Size / 100
-            local drop = Create("Frame", {
-                Position = UDim2.new(math.random(), 0, 0, -12), Size = UDim2.fromOffset(size, rain and size * 7 or size),
-                BorderSizePixel = 0, BackgroundTransparency = rain and 0.55 or 0.25, ZIndex = 41, Theme = { BackgroundColor3 = "Text" }, Parent = layer,
-            })
-            if not rain then Corner(drop, 99) end
-            local fall = rain and math.random(70, 110) / 100 or math.random(400, 700) / 100
-            Tween(drop, { Position = UDim2.new(drop.Position.X.Scale + (rain and -0.04 or (math.random() - 0.5) * 0.08), 0, 1, 12) }, fall, Enum.EasingStyle.Linear)
-            task.delay(fall, function() drop:Destroy() end)
-            task.wait((rain and 0.03 or 0.12) * 100 / math.max(c.Amount, 1))
+    local run = self.WeatherRun
+    local count = math.max(1, math.floor(def.Count[inside and 2 or 1] * c.Amount))
+
+    local function spawnOne(first)
+        if self.WeatherRun ~= run or not layer.Parent then return end
+        local t = Library.Theme
+        local lo, hi = (def.Size or { 3, 6 })[1], (def.Size or { 3, 6 })[2]
+        local size = (lo + math.random() * (hi - lo)) * c.Size
+        local k = (size / c.Size - lo) / math.max(hi - lo, 1)
+        -- bigger pieces read stronger, smaller ones fade back (what their hearts do)
+        local alpha = 0.5 - k * 0.32
+        local colour = def.Tint and t.Accent:Lerp(t.Accent2, math.random()):Lerp(WHITE, 0.25 + (1 - k) * 0.2) or t.Text
+        local piece
+        if def.Icon then
+            piece = Create("ImageLabel", { Size = UDim2.fromOffset(size, size), BackgroundTransparency = 1, Image = Icon(def.Icon), ImageColor3 = colour, ImageTransparency = alpha, ZIndex = 41, Parent = layer })
+        elseif c.Kind == "Rain" then
+            piece = Create("Frame", { Size = UDim2.fromOffset(1.5 * c.Size, 14 * c.Size), BorderSizePixel = 0, BackgroundColor3 = colour, BackgroundTransparency = 0.55, Rotation = 12, ZIndex = 41, Parent = layer })
+        else
+            local w = c.Kind == "Petals" and size * 1.6 or size
+            piece = Create("Frame", { Size = UDim2.fromOffset(w, size), BorderSizePixel = 0, BackgroundColor3 = colour, BackgroundTransparency = c.Kind == "Snow" and 0.25 or alpha, ZIndex = 41, Parent = layer })
+            Corner(piece, 99)
         end
-    end)
+        piece.AnchorPoint = Vector2.new(0.5, 0.5)
+        piece.Rotation = def.Spin and math.random(0, 360) or (def.Icon and math.random(-20, 25) or piece.Rotation)
+        local x = math.random()
+        local from, to = def.Rise and 1.05 or -0.05, def.Rise and -0.05 or 1.05
+        if first then from = math.random() end
+        local life = def.Time[1] + math.random() * (def.Time[2] - def.Time[1])
+        if first then life *= math.abs(to - from) / 1.1 end
+        piece.Position = UDim2.fromScale(x, from)
+        local drift = (def.Drift or 0.02) * (math.random() < 0.5 and -1 or 1)
+        Tween(piece, { Position = UDim2.fromScale(x + drift, to) }, life, Enum.EasingStyle.Linear)
+        if def.Spin then Tween(piece, { Rotation = piece.Rotation + def.Spin * (math.random() < 0.5 and -1 or 1) }, life, Enum.EasingStyle.Linear) end
+        if def.Twinkle then
+            task.spawn(function()
+                while piece.Parent do
+                    Tween(piece, { ImageTransparency = math.min(alpha + 0.4, 0.95) }, 0.8, Enum.EasingStyle.Sine)
+                    task.wait(0.8)
+                    if not piece.Parent then break end
+                    Tween(piece, { ImageTransparency = alpha }, 0.8, Enum.EasingStyle.Sine)
+                    task.wait(0.8)
+                end
+            end)
+        end
+        task.delay(life, function()
+            if piece.Parent then piece:Destroy() end
+            spawnOne(false)
+        end)
+    end
+    for _ = 1, count do spawnOne(true) end
 end
 
 -- ═══════════════════════════════════════════════════════════
@@ -890,6 +1016,17 @@ function Library:SetPattern(kind, strength)
     W.Pattern = layer
     local a, step = 1 - c.Strength / 100 * 0.6, 24
     local size = W.Main.AbsoluteSize
+    if c.Kind == "Diagonal" then
+        for x = -size.Y, size.X, step do
+            Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromOffset(x + size.Y / 2, size.Y / 2), Size = UDim2.fromOffset(1, size.Y * 1.5), Rotation = 45, BorderSizePixel = 0, BackgroundTransparency = a, Theme = { BackgroundColor3 = "Outline" }, Parent = layer })
+        end
+        return
+    elseif c.Kind == "Noise" then
+        for _ = 1, math.floor(size.X * size.Y / 900) do
+            Create("Frame", { Position = UDim2.fromOffset(math.random(0, size.X), math.random(0, size.Y)), Size = UDim2.fromOffset(1, 1), BorderSizePixel = 0, BackgroundTransparency = a, Theme = { BackgroundColor3 = "Text" }, Parent = layer })
+        end
+        return
+    end
     if c.Kind == "Grid" then
         for x = 0, size.X, step do Create("Frame", { Position = UDim2.fromOffset(x, 0), Size = UDim2.new(0, 1, 1, 0), BorderSizePixel = 0, BackgroundTransparency = a, Theme = { BackgroundColor3 = "Divider" }, Parent = layer }) end
         for y = 0, size.Y, step do Create("Frame", { Position = UDim2.fromOffset(0, y), Size = UDim2.new(1, 0, 0, 1), BorderSizePixel = 0, BackgroundTransparency = a, Theme = { BackgroundColor3 = "Divider" }, Parent = layer }) end
@@ -979,7 +1116,7 @@ local function NavIcon(name) return NAV_ICONS[(name or ""):lower()] or "layout-d
 
 function Window:AddCategory(Name)
     -- a sidebar group: a clickable header with a chevron, and the tabs under it
-    local C = setmetatable({ Window = self, Name = Name, Tabs = {}, Rows = {}, Order = #self.Categories * 100, Collapsed = false }, Category)
+    local C = setmetatable({ Window = self, Name = Name, Tabs = {}, Rows = {}, Order = #self.Categories * 1000, Collapsed = false }, Category)
 
     local head = Create("TextButton", { Size = UDim2.new(1, 0, 0, 26), BackgroundTransparency = 1, AutoButtonColor = false, Text = "", LayoutOrder = C.Order, Parent = self.Nav })
     Label({ Position = UDim2.fromOffset(14, 0), Size = UDim2.new(1, -40, 1, 0), Text = Name, FontFace = FONT.Medium, TextSize = 12, Theme = { TextColor3 = "SubText" }, Parent = head })
@@ -988,7 +1125,7 @@ function Window:AddCategory(Name)
 
     function C:SetCollapsed(state)
         self.Collapsed = state
-        for _, row in self.Rows do row.Visible = not state end
+        for _, T in self.Tabs do T:RefreshRows() end
         Tween(chev, { Rotation = state and -90 or 0 }, 0.18)
     end
     Connect(head.MouseButton1Click, function() C:SetCollapsed(not C.Collapsed) end)
@@ -997,19 +1134,16 @@ function Window:AddCategory(Name)
     return C
 end
 
-function Category:AddTab(Name, iconOverride)
-    local W = self.Window
-    local order = self.Order + #self.Tabs + 1
-
-    local row = Create("TextButton", { Size = UDim2.new(1, 0, 0, 34), BackgroundTransparency = 1, AutoButtonColor = false, Text = "", LayoutOrder = order, Parent = W.Nav })
-    -- the selected row sits on a filled pill, with the accent bar outside it
-    local pill = Create("Frame", { Position = UDim2.fromOffset(6, 1), Size = UDim2.new(1, -12, 1, -2), BackgroundTransparency = 1, Theme = { BackgroundColor3 = "Element" }, Parent = row })
+-- one nav row + its page. top-level rows are 34 tall; sub rows sit 14px further in and are 30 tall
+local function BuildTab(W, C, Name, iconOverride, order, indent, height)
+    local row = Create("TextButton", { Size = UDim2.new(1, 0, 0, height), BackgroundTransparency = 1, AutoButtonColor = false, Text = "", LayoutOrder = order, Parent = W.Nav })
+    local pill = Create("Frame", { Position = UDim2.fromOffset(6 + indent, 1), Size = UDim2.new(1, -12 - indent, 1, -2), BackgroundTransparency = 1, Theme = { BackgroundColor3 = "Element" }, Parent = row })
     Corner(pill, 7)
     local bar = Create("Frame", { AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.fromScale(0, 0.5), Size = UDim2.fromOffset(3, 0), BackgroundTransparency = 1, Theme = { BackgroundColor3 = "Accent" }, Parent = row })
     Corner(bar, 2)
     local barGlow = Library:AddGlow(bar, 0.6)
-    local icon = Create("ImageLabel", { Position = UDim2.fromOffset(13, 9), Size = UDim2.fromOffset(16, 16), BackgroundTransparency = 1, Image = Icon(iconOverride or NavIcon(Name)), Theme = { ImageColor3 = "SubText" }, Parent = row })
-    local text = Label({ Position = UDim2.fromOffset(37, 0), Size = UDim2.new(1, -45, 1, 0), Text = Name, FontFace = FONT.Medium, TextSize = 14, Theme = { TextColor3 = "SubText" }, Parent = row })
+    local icon = Create("ImageLabel", { Position = UDim2.fromOffset(13 + indent, (height - 16) / 2), Size = UDim2.fromOffset(16, 16), BackgroundTransparency = 1, Image = Icon(iconOverride or NavIcon(Name)), Theme = { ImageColor3 = "SubText" }, Parent = row })
+    local text = Label({ Position = UDim2.fromOffset(37 + indent, 0), Size = UDim2.new(1, -45 - indent, 1, 0), Text = Name, FontFace = FONT.Medium, TextSize = 14, Theme = { TextColor3 = "SubText" }, Parent = row })
 
     local page = Create("ScrollingFrame", {
         Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, BorderSizePixel = 0, Visible = false,
@@ -1026,11 +1160,10 @@ function Category:AddTab(Name, iconOverride)
     List(right, 12)
 
     local T = setmetatable({
-        Window = W, Category = self, Name = Name, Page = page, Row = row, Bar = bar, Icon = icon, Text = text, Pill = pill, BarGlow = barGlow,
-        Columns = { left, right }, GroupCount = 0, Groupboxes = {},
+        Window = W, Category = C, Name = Name, Page = page, Row = row, Bar = bar, Icon = icon, Text = text, Pill = pill, BarGlow = barGlow,
+        Columns = { left, right }, GroupCount = 0, Groupboxes = {}, Subs = {}, Expanded = true, Order = order,
     }, Tab)
-    table.insert(self.Tabs, T)
-    table.insert(self.Rows, row)
+    table.insert(C.Rows, row)
     table.insert(W.Tabs, T)
 
     Connect(row.MouseEnter, function()
@@ -1042,17 +1175,67 @@ function Category:AddTab(Name, iconOverride)
     Connect(row.MouseLeave, function()
         if W.ActiveTab ~= T then Tween(pill, { BackgroundTransparency = 1 }) end
     end)
-    Connect(row.MouseButton1Click, function() T:Select() end)
+    Connect(row.MouseButton1Click, function()
+        -- a parent with sub tabs folds open/shut instead of opening a page of its own
+        if #T.Subs > 0 then
+            T.Expanded = not T.Expanded
+            T:RefreshRows()
+            if T.Expanded and not (W.ActiveTab and W.ActiveTab.Parent == T) then T.Subs[1]:Select() end
+        else
+            T:Select()
+        end
+    end)
+    return T
+end
 
+Library:OnThemeRefresh(function()
+    local W = Library.Window
+    local T = W and W.ActiveTab
+    if not T then return end
+    T.Icon.ImageColor3, T.Text.TextColor3, T.Pill.BackgroundColor3 = Library.Theme.Accent, Library.Theme.TextBright, Library.Theme.Element
+    if T.Parent then T.Parent.Icon.ImageColor3, T.Parent.Text.TextColor3 = Library.Theme.Accent, Library.Theme.TextBright end
+    for _, other in W.Tabs do
+        if other ~= T and other ~= T.Parent then other.Icon.ImageColor3, other.Text.TextColor3 = Library.Theme.SubText, Library.Theme.SubText end
+    end
+end)
+
+function Category:AddTab(Name, iconOverride)
+    local W = self.Window
+    local T = BuildTab(W, self, Name, iconOverride, self.Order + (#self.Tabs + 1) * 20, 0, 34)
+    table.insert(self.Tabs, T)
     if not W.ActiveTab then T:Select() end
     return T
+end
+
+-- a sub tab tucked under this one (BigFroot's Roll -> Roll / Inventory)
+function Tab:AddSubTab(Name, iconOverride)
+    local W, C = self.Window, self.Category
+    local S = BuildTab(W, C, Name, iconOverride, self.Order + #self.Subs + 1, 14, 30)
+    S.Parent = self
+    table.insert(self.Subs, S)
+    S.Row.Visible = self.Expanded and not C.Collapsed
+    -- the first sub takes over if the parent was the open page
+    if W.ActiveTab == self then S:Select() end
+    return S
+end
+
+function Tab:RefreshRows()
+    local hidden = self.Category.Collapsed
+    self.Row.Visible = not hidden
+    for _, S in self.Subs do S.Row.Visible = not hidden and self.Expanded end
 end
 
 function Tab:Select()
     local W = self.Window
     if W.ActiveTab == self then return end
+    if #self.Subs > 0 then return self.Subs[1]:Select() end
     if W.ActiveTab then
         local old = W.ActiveTab
+        if old.Parent and old.Parent ~= self.Parent then
+            old.Parent.Icon.ImageColor3 = Library.Theme.SubText
+            old.Parent.Text.TextColor3 = Library.Theme.SubText
+            old.Parent.Text.FontFace = FONT.Medium
+        end
         old.Page.Visible = false
         old.Bar.Size, old.Bar.BackgroundTransparency = UDim2.fromOffset(3, 0), 1
         Library:SetGlow(old.BarGlow, false)
@@ -1065,17 +1248,28 @@ function Tab:Select()
     self.Page.Visible = true
     self.Pill.BackgroundColor3 = Library.Theme.Element
     self.Pill.BackgroundTransparency = 0
-    self.Bar.Size, self.Bar.BackgroundTransparency = UDim2.fromOffset(3, 18), 0
+    -- measured: the bar lands 26 tall, holds ~0.15s, then settles to 18
+    self.Bar.Size, self.Bar.BackgroundTransparency = UDim2.fromOffset(3, 26), 0
+    task.delay(0.15, function()
+        if W.ActiveTab == self then Ease(self.Bar, { Size = UDim2.fromOffset(3, 18) }, "Bar") end
+    end)
+    -- measured: the page drops 2px and comes back inside 0.05s
+    self.Page.Position = UDim2.fromOffset(0, 2)
+    Ease(self.Page, { Position = UDim2.fromOffset(0, 0) }, "Nudge")
     Library:SetGlow(self.BarGlow, true)
     self.Icon.ImageColor3 = Library.Theme.Accent
     self.Text.TextColor3 = Library.Theme.TextBright
     self.Text.FontFace = FONT.SemiBold
     self.Text.TextColor3 = Library.Theme.TextBright
 
+    if self.Parent then
+        self.Parent.Icon.ImageColor3 = Library.Theme.Accent
+        self.Parent.Text.TextColor3 = Library.Theme.TextBright
+        self.Parent.Text.FontFace = FONT.SemiBold
+    end
     local a = Library.Theme.Accent
-    W.Crumb.Text = string.format('<font color="rgb(%d,%d,%d)">%s</font>  ›  %s', a.R * 255, a.G * 255, a.B * 255, self.Category.Name, self.Name)
+    W.Crumb.Text = string.format('<font color="rgb(%d,%d,%d)">%s</font>  ›  %s', a.R * 255, a.G * 255, a.B * 255, self.Parent and self.Parent.Name or self.Category.Name, self.Name)
 
-    -- fade the page in
 end
 
 
@@ -1269,8 +1463,22 @@ local function MakeCardMovable(G, head, chevron)
         saveSpot()
     end)
 
-    -- right click the header to pop the card out
-    Connect(head.MouseButton2Click, function() G:PopOut() end)
+    -- right click the header: their menu, Pop out and Reset position
+    function G:ResetPosition()
+        local layout = ReadLayout()
+        layout[key] = nil
+        SaveLayout(layout)
+        if self.HomeColumn then
+            self.Card.Parent = self.HomeColumn
+            self.Card.LayoutOrder = self.HomeOrder
+        end
+    end
+    Connect(head.MouseButton2Click, function()
+        Library:ShowContextMenu({
+            { Text = "Pop out", Icon = "external-link", Callback = function() G:PopOut() end },
+            { Text = "Reset position", Icon = "rotate-cw", Callback = function() G:ResetPosition() end },
+        })
+    end)
 end
 
 function Tab:AddGroupbox(Name, iconOverride)
@@ -1298,10 +1506,27 @@ function Tab:AddGroupbox(Name, iconOverride)
     G.List = List(G.Body, 10)
     Pad(G.Body, 14, 14, 10, 14)
 
+    -- the card height eases shut and open: 0.20s Quart Out, measured off theirs
     local function setCollapsed(state, instant)
         G.Collapsed = state
-        G.Body.Visible = not state
         chevron.Rotation = state and -90 or 0
+        local full = G.List.AbsoluteContentSize.Y + 24
+        if instant then
+            G.Body.Visible = not state
+        elseif state then
+            G.Body.AutomaticSize = Enum.AutomaticSize.None
+            G.Body.Size = UDim2.new(1, 0, 0, full)
+            Ease(G.Body, { Size = UDim2.new(1, 0, 0, 0) }, "Collapse").Completed:Once(function()
+                if G.Collapsed then G.Body.Visible = false end
+            end)
+        else
+            G.Body.Visible = true
+            G.Body.AutomaticSize = Enum.AutomaticSize.None
+            G.Body.Size = UDim2.new(1, 0, 0, 0)
+            Ease(G.Body, { Size = UDim2.new(1, 0, 0, full) }, "Collapse").Completed:Once(function()
+                if not G.Collapsed then G.Body.AutomaticSize = Enum.AutomaticSize.Y end
+            end)
+        end
         local file = ReadCollapse()
         file[self.Name .. "::" .. Name] = state or nil
         SaveCollapse(file)
@@ -1311,6 +1536,7 @@ function Tab:AddGroupbox(Name, iconOverride)
     local saved = ReadCollapse()[self.Name .. "::" .. Name]
     if saved ~= nil then setCollapsed(saved, true) elseif Library.CollapseDefault then setCollapsed(true, true) end
 
+    G.HomeColumn, G.HomeOrder = G.Card.Parent, G.Card.LayoutOrder
     MakeCardMovable(G, head, chevron)
     local spot = ReadLayout()[self.Name .. "::" .. Name]
     if spot and self.Columns[spot.col] then
@@ -1362,12 +1588,12 @@ function Groupbox:AddToggle(Flag, Options)
         Library.Flags[Flag] = self.Value
         if self.Value then
             box.BackgroundColor3 = Library.Theme.Accent
-            check.ImageTransparency = 0
+            Ease(check, { ImageTransparency = 0 }, "Check")
             stroke.Transparency = 1
             Library:SetGlow(boxGlow, true)
         else
             box.BackgroundColor3 = Library.Theme.Element
-            check.ImageTransparency = 1
+            Ease(check, { ImageTransparency = 1 }, "Check")
             stroke.Transparency = 0.3
             Library:SetGlow(boxGlow, false)
         end
@@ -1375,6 +1601,9 @@ function Groupbox:AddToggle(Flag, Options)
         for _, cb in self.Callbacks do pcall(cb, self.Value) end
     end
     function Toggle:OnChanged(fn) table.insert(self.Callbacks, fn); return self end
+    Library:OnThemeRefresh(function()
+        box.BackgroundColor3 = Toggle.Value and Library.Theme.Accent or Library.Theme.Element
+    end)
     function Toggle:GetState() return self.Value end
 
     local btn = Create("TextButton", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "", Parent = top })
@@ -1480,6 +1709,45 @@ function Groupbox:AddSectionLabel(Text)
 end
 
 
+-- their context menu: 170 wide, 24px rows with 2px gaps and 4px padding, panel colour that lights on hover,
+-- text left, a 14px icon right, clamped to the screen, opening with Appear()
+function Library:ShowContextMenu(items)
+    if self.ContextGui then self.ContextGui:Destroy() end
+    local gui = Create("ScreenGui", { Name = HttpService:GenerateGUID(false), IgnoreGuiInset = true, DisplayOrder = 99998, ResetOnSpawn = false, Parent = GuiParent() })
+    self.ContextGui = gui
+    local blocker = Create("TextButton", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = "", Parent = gui })
+    local h = #items * 26 + 8
+    local menu = Create("Frame", { Size = UDim2.fromOffset(170, h), Theme = { BackgroundColor3 = "Panel" }, Parent = gui })
+    Corner(menu, 6)
+    Pad(menu, 4, 4, 4, 4)
+    List(menu, 2)
+    for i, it in items do
+        if it.Divider then
+            Create("Frame", { Size = UDim2.new(1, 0, 0, 1), BorderSizePixel = 0, LayoutOrder = i, Theme = { BackgroundColor3 = "Outline" }, Parent = menu })
+        else
+            local row = Create("TextButton", { Size = UDim2.new(1, 0, 0, 24), AutoButtonColor = false, Text = "", LayoutOrder = i, Theme = { BackgroundColor3 = "Panel" }, Parent = menu })
+            Corner(row, 4)
+            Label({ Position = UDim2.fromOffset(8, 0), Size = UDim2.new(1, -30, 1, 0), Text = it.Text, TextSize = 14, Theme = { TextColor3 = it.Risky and "Risky" or "Text" }, Parent = row })
+            if it.Icon then
+                Create("ImageLabel", { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -8, 0.5, 0), Size = UDim2.fromOffset(14, 14), BackgroundTransparency = 1, Image = Icon(it.Icon), Theme = { ImageColor3 = it.Risky and "Risky" or "DimText" }, Parent = row })
+            end
+            Connect(row.MouseEnter, function() Ease(row, { BackgroundColor3 = Library.Theme.Hover }, "Hover") end)
+            Connect(row.MouseLeave, function() Ease(row, { BackgroundColor3 = Library.Theme.Panel }, "Hover") end)
+            Connect(row.MouseButton1Click, function()
+                gui:Destroy()
+                self.ContextGui = nil
+                if it.Callback then pcall(it.Callback) end
+            end)
+        end
+    end
+    local m, vp = UserInputService:GetMouseLocation(), workspace.CurrentCamera.ViewportSize
+    menu.Position = UDim2.fromOffset(math.min(m.X + 2, vp.X - 170 - 8), math.min(m.Y + 2, vp.Y - h - 8))
+    Appear(menu)
+    Connect(blocker.MouseButton1Click, function() gui:Destroy() self.ContextGui = nil end)
+    Connect(blocker.MouseButton2Click, function() gui:Destroy() self.ContextGui = nil end)
+end
+
+
 -- ═══════════════════════════════════════════════════════════
 -- DROPDOWN  (field with the value + chevron, opens a list below)
 -- ═══════════════════════════════════════════════════════════
@@ -1494,8 +1762,8 @@ function Groupbox:AddDropdown(Flag, Options)
 
     local field = Create("TextButton", { Position = UDim2.fromOffset(0, 20), Size = UDim2.new(1, 0, 0, 26), AutoButtonColor = false, Text = "", Theme = { BackgroundColor3 = "Element" }, Parent = holder })
     Corner(field, 6)
-    Connect(field.MouseEnter, function() Tween(field, { BackgroundColor3 = Library.Theme.Hover }, 0.12) end)
-    Connect(field.MouseLeave, function() Tween(field, { BackgroundColor3 = Library.Theme.Element }, 0.12) end)
+    Connect(field.MouseEnter, function() Ease(field, { BackgroundColor3 = Library.Theme.Hover }, "Hover") end)
+    Connect(field.MouseLeave, function() Ease(field, { BackgroundColor3 = Library.Theme.Element }, "Hover") end)
     local valueLbl = Label({ Position = UDim2.fromOffset(10, 0), Size = UDim2.new(1, -36, 1, 0), Text = "--", FontFace = FONT.Medium, TextSize = 14, TextTruncate = Enum.TextTruncate.AtEnd, Theme = { TextColor3 = "TextBright" }, Parent = field })
     local arrow = Create("ImageLabel", { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -8, 0.5, 0), Size = UDim2.fromOffset(16, 16), BackgroundTransparency = 1, Image = Icon("chevron-down"), Theme = { ImageColor3 = "SubText" }, Parent = field })
 
@@ -1550,9 +1818,18 @@ function Groupbox:AddDropdown(Flag, Options)
 
     function Dropdown:Toggle(state)
         self.Open = state == nil and not self.Open or state
-        list.Visible = self.Open
         arrow.Rotation = self.Open and 180 or 0
-        if self.Open then Library:ClosePopup(self); Library.OpenPopup = self end
+        list.AutomaticSize = Enum.AutomaticSize.None
+        if self.Open then
+            Library:ClosePopup(self); Library.OpenPopup = self
+            list.Visible = true
+            list.Size = UDim2.new(1, 0, 0, 0)
+            Ease(list, { Size = UDim2.new(1, 0, 0, inner.AbsoluteSize.Y) }, "Drop")
+            Appear(list)
+        else
+            local tw = Ease(list, { Size = UDim2.new(1, 0, 0, 0) }, "Drop")
+            tw.Completed:Once(function() if not self.Open then list.Visible = false end end)
+        end
     end
     function Dropdown:_fire()
         Library.Flags[Flag] = self.Value
@@ -1637,13 +1914,16 @@ function Groupbox:AddButton(Options)
     if Options.Color == "Danger" or Options.Danger then btn.TextColor3 = Library.Theme.Danger end
     if Options.Description then AddDesc(holder, Options.Description, 28) end
 
-    Connect(btn.MouseEnter, function() Tween(btn, { BackgroundColor3 = Library.Theme.Hover }, 0.12) end)
-    Connect(btn.MouseLeave, function() Tween(btn, { BackgroundColor3 = Library.Theme.Element }, 0.12) end)
+    Connect(btn.MouseEnter, function() Ease(btn, { BackgroundColor3 = Library.Theme.Hover }, "Hover") end)
+    Connect(btn.MouseLeave, function() Ease(btn, { BackgroundColor3 = Library.Theme.Element }, "Hover") end)
     local last = 0
     Connect(btn.MouseButton1Click, function()
         if Options.DoubleClick and os.clock() - last > 0.4 then last = os.clock(); btn.Text = "Are you sure?"; task.delay(1, function() btn.Text = Options.Text or "Button" end); return end
-        btn.BackgroundColor3 = Library.Theme.Accent
-        task.delay(0.08, function() btn.BackgroundColor3 = Library.Theme.Element end)
+        -- bright on click, then eases back; the button pops like theirs
+        local txt = btn.TextColor3
+        btn.BackgroundColor3, btn.TextColor3 = Library.Theme.Accent, Library.Theme.Check
+        Tween(btn, { BackgroundColor3 = Library.Theme.Element, TextColor3 = txt })
+        Pop(btn)
         if Options.Func then pcall(Options.Func) end
         if Options.Callback then pcall(Options.Callback) end
     end)
@@ -1709,9 +1989,16 @@ function Groupbox:AddButtonRow(a, b)
         Corner(btn, 6)
         if opt.Color == "Danger" then btn.TextColor3 = Library.Theme.Danger end
         if opt.Color == "Risky" then btn.TextColor3 = Library.Theme.Risky end
-        Connect(btn.MouseEnter, function() Tween(btn, { BackgroundColor3 = Library.Theme.Hover }) end)
-        Connect(btn.MouseLeave, function() Tween(btn, { BackgroundColor3 = Library.Theme.Element }) end)
-        Connect(btn.MouseButton1Click, function() if opt.Func then pcall(opt.Func) end if opt.Callback then pcall(opt.Callback) end end)
+        Connect(btn.MouseEnter, function() Ease(btn, { BackgroundColor3 = Library.Theme.Hover }, "Hover") end)
+        Connect(btn.MouseLeave, function() Ease(btn, { BackgroundColor3 = Library.Theme.Element }, "Hover") end)
+        Connect(btn.MouseButton1Click, function()
+            local txt = btn.TextColor3
+            btn.BackgroundColor3, btn.TextColor3 = Library.Theme.Accent, Library.Theme.Check
+            Tween(btn, { BackgroundColor3 = Library.Theme.Element, TextColor3 = txt })
+            Pop(btn)
+            if opt.Func then pcall(opt.Func) end
+            if opt.Callback then pcall(opt.Callback) end
+        end)
         out[i] = btn
     end
     self:Register(holder, (a.Text or "") .. " " .. (b.Text or ""))
@@ -1928,10 +2215,10 @@ function Library:CreateSettingsTab(W)
     menu:AddToggle("_ZeroWatermark", { Text = "Watermark", Default = true, Callback = function(v) Library:SetWatermark(v, W.Config.Title, W.Config.GameName) end })
     menu:AddToggle("_ZeroMobileToggle", { Text = "Mobile toggle button", Default = false, Callback = function(v) Library:SetMobileButton(v, W) end })
     menu:AddToggle("_ZeroDimBackground", { Text = "Dim background", Default = false, Callback = function(v) W:SetDimBackground(v) end })
-    menu:AddDropdown("_ZeroWeather", { Text = "Weather", Values = { "Off", "Snow", "Rain" }, Default = "Off", Callback = function(v) Library:SetWeather({ Kind = v }) end })
-    menu:AddDropdown("_ZeroWeatherArea", { Text = "Weather area", Values = { "Inside UI", "Full screen" }, Default = "Inside UI", Callback = function(v) Library:SetWeather({ Area = v }) end })
-    menu:AddSlider("_ZeroWeatherAmount", { Text = "Weather amount", Min = 10, Max = 200, Default = 100, Suffix = "%", Callback = function(v) Library:SetWeather({ Amount = v }) end })
-    menu:AddSlider("_ZeroWeatherSize", { Text = "Weather size", Min = 50, Max = 200, Default = 100, Suffix = "%", Callback = function(v) Library:SetWeather({ Size = v }) end })
+    menu:AddDropdown("_ZeroWeather", { Text = "Weather", Values = Library.WeatherKinds, Default = "Off", Callback = function(v) Library:SetWeather({ Kind = v }) end })
+    menu:AddDropdown("_ZeroWeatherArea", { Text = "Weather area", Values = { "Inside UI", "Whole screen" }, Default = "Inside UI", Callback = function(v) Library:SetWeather({ Area = v }) end })
+    menu:AddSlider("_ZeroWeatherAmount", { Text = "Weather amount", Min = 25, Max = 200, Default = 100, Suffix = "%", Callback = function(v) Library:SetWeather({ Amount = v / 100 }) end })
+    menu:AddSlider("_ZeroWeatherSize", { Text = "Weather size", Min = 50, Max = 200, Default = 100, Suffix = "%", Callback = function(v) Library:SetWeather({ Size = v / 100 }) end })
     menu:AddToggle("_ZeroDragCards", { Text = "Draggable cards", Default = true, Callback = function(v) Library.DragCards = v end })
     menu:AddToggle("_ZeroCollapseSidebar", { Text = "Collapse sidebar", Default = false, Callback = function(v)
         for _, c in W.Categories do c:SetCollapsed(v) end
@@ -1997,7 +2284,7 @@ function Library:CreateSettingsTab(W)
         { Text = "Reset", Func = function() Library:SetIcon(nil) end })
 
     th:AddSectionLabel("pattern")
-    th:AddDropdown("_ZeroPattern", { Text = "Pattern", Values = { "None", "Grid", "Dots" }, Default = "None", Callback = function(v) Library:SetPattern(v) end })
+    th:AddDropdown("_ZeroPattern", { Text = "Pattern", Values = { "None", "Dots", "Grid", "Diagonal", "Noise" }, Default = "None", Callback = function(v) Library:SetPattern(v) end })
     th:AddSlider("_ZeroPatternStrength", { Text = "Pattern strength", Min = 0, Max = 100, Default = 12, Suffix = "%", Callback = function(v) Library:SetPattern(nil, v) end })
 
     th:AddSectionLabel("your themes")
@@ -2094,6 +2381,184 @@ function Groupbox:AddTable(TitleText, Options)
     function T:Set(label, value) if self.Cells[label] then self.Cells[label].Text = tostring(value) end end
     self:Register(holder, TitleText)
     return T
+end
+
+-- ═══════════════════════════════════════════════════════════
+-- DATA TABLE  (the Bag panel: a header row you click to sort, rows, a row count)
+-- ═══════════════════════════════════════════════════════════
+function Groupbox:AddDataTable(Flag, Options)
+    Options = Options or {}
+    local cols = Options.Columns or {}
+    local holder = Create("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, Parent = self.Body })
+    if Options.Text then
+        Label({ Size = UDim2.new(1, 0, 0, 18), Text = Options.Text, TextSize = 14, Theme = { TextColor3 = "Text" }, Parent = holder })
+    end
+    local top = Options.Text and 22 or 0
+    local box = Create("Frame", { Position = UDim2.fromOffset(0, top), Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, Parent = holder })
+    List(box, 2)
+
+    -- widths: a column can ask for a share, the rest split what's left
+    local fixed, flex = 0, 0
+    for _, c in cols do if c.Width then fixed += c.Width else flex += 1 end end
+    local function widthOf(c) return c.Width and UDim.new(c.Width, 0) or UDim.new((1 - fixed) / math.max(flex, 1), 0) end
+
+    local T = { Rows = Options.Rows or {}, SortKey = nil, SortDesc = false, Type = "DataTable" }
+    local headCells = {}
+    local head = Create("Frame", { Size = UDim2.new(1, 0, 0, 22), BackgroundTransparency = 1, LayoutOrder = 0, Parent = box })
+    List(head, 0, Enum.FillDirection.Horizontal)
+    for i, c in cols do
+        local cell = Create("TextButton", { Size = UDim2.new(widthOf(c).Scale, 0, 1, 0), BackgroundTransparency = 1, AutoButtonColor = false, Text = "", LayoutOrder = i, Parent = head })
+        local lbl = Label({ Position = UDim2.fromOffset(10, 0), Size = UDim2.new(1, -14, 1, 0), Text = c.Name, FontFace = FONT.Medium, TextSize = 12, TextXAlignment = c.Align == "Right" and Enum.TextXAlignment.Right or Enum.TextXAlignment.Left, Theme = { TextColor3 = "DimText" }, Parent = cell })
+        local arrow = Create("ImageLabel", { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -2, 0.5, 0), Size = UDim2.fromOffset(10, 10), BackgroundTransparency = 1, Image = Icon("chevron-up"), ImageTransparency = 1, Theme = { ImageColor3 = "Accent" }, Parent = cell })
+        headCells[i] = { label = lbl, arrow = arrow, key = c.Key or c.Name }
+        Connect(cell.MouseButton1Click, function()
+            local k = c.Key or c.Name
+            if T.SortKey == k then T.SortDesc = not T.SortDesc else T.SortKey, T.SortDesc = k, false end
+            T:Render()
+        end)
+    end
+
+    local footer = Label({ Size = UDim2.new(1, 0, 0, 18), Text = "", FontFace = FONT.Regular, TextSize = 12, TextXAlignment = Enum.TextXAlignment.Right, LayoutOrder = 1e6, Theme = { TextColor3 = "DimText" }, Parent = box })
+    local rowFrames = {}
+
+    function T:Render()
+        for _, f in rowFrames do f:Destroy() end
+        table.clear(rowFrames)
+        local rows = table.clone(self.Rows)
+        if self.SortKey then
+            table.sort(rows, function(a, b)
+                local x, y = a[self.SortKey], b[self.SortKey]
+                local nx, ny = tonumber(x), tonumber(y)
+                if nx and ny then x, y = nx, ny else x, y = tostring(x or ""), tostring(y or "") end
+                if self.SortDesc then return x > y end
+                return x < y
+            end)
+        end
+        for _, h in headCells do
+            local on = h.key == self.SortKey
+            h.label.TextColor3 = on and Library.Theme.Accent or Library.Theme.DimText
+            h.arrow.ImageTransparency = on and 0 or 1
+            h.arrow.Rotation = (on and self.SortDesc) and 180 or 0
+        end
+        for i, r in rows do
+            local line = Create("Frame", { Size = UDim2.new(1, 0, 0, 24), LayoutOrder = i, Theme = { BackgroundColor3 = "Element" }, Parent = box })
+            Corner(line, 4)
+            List(line, 0, Enum.FillDirection.Horizontal)
+            for j, c in cols do
+                local v = r[c.Key or c.Name]
+                Label({ Size = UDim2.new(widthOf(c).Scale, 0, 1, 0), Text = v == nil and "-" or tostring(v), TextSize = 13, LayoutOrder = j,
+                    TextXAlignment = c.Align == "Right" and Enum.TextXAlignment.Right or Enum.TextXAlignment.Left, Theme = { TextColor3 = "Text" }, Parent = line }).Position = UDim2.fromOffset(10, 0)
+            end
+            Pad(line, 10, 4, 0, 0)
+            rowFrames[i] = line
+        end
+        footer.Text = #rows .. (#rows == 1 and " row" or " rows")
+    end
+    function T:SetRows(rows) self.Rows = rows or {}; self:Render() end
+    function T:AddRow(r) table.insert(self.Rows, r); self:Render() end
+    function T:Clear() self.Rows = {}; self:Render() end
+    T:Render()
+    Library:OnThemeRefresh(function() if holder.Parent then T:Render() end end)
+    if Flag then Library.Options[Flag] = T end
+    self:Register(holder, Options.Text or Flag)
+    return T
+end
+
+-- ═══════════════════════════════════════════════════════════
+-- HOME PAGE  (Quick actions, live Status, Account)
+-- ═══════════════════════════════════════════════════════════
+function Window:AddHomeTab(Options)
+    Options = Options or {}
+    local cat = self.Categories[1] or self:AddCategory("Main")
+    local tab = cat:AddTab(Options.Name or "Home", "house")
+    local discord = Options.Discord or "discord.gg/getzerohub"
+
+    local quick = tab:AddGroupbox("Quick actions", "zap")
+    quick:AddButtonRow(
+        { Text = "Copy Discord", Func = function()
+            pcall(setclipboard, discord)
+            Library:Notify({ Title = "Discord", Description = "Copied " .. discord })
+        end },
+        { Text = "Load last config", Func = function()
+            local folder = self.Config.Folder or Library.Folder
+            local name = Library.LoadedConfig or SafeFile(readfile, folder .. "/autoload.txt")
+            if name then
+                Library:LoadConfig(folder .. "/configs/" .. name .. ".json")
+                Library:Notify({ Title = "Configs", Description = "Loaded " .. name })
+            else
+                Library:Notify({ Title = "Configs", Description = "No config saved yet" })
+            end
+        end })
+    quick:AddButtonRow(
+        { Text = "Rejoin", Func = function() TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer) end },
+        { Text = "Server hop", Func = function()
+            local ok, body = pcall(function() return game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100") end)
+            local data = ok and HttpService:JSONDecode(body)
+            for _, sv in data and data.data or {} do
+                if sv.id ~= game.JobId and sv.playing < sv.maxPlayers then
+                    return TeleportService:TeleportToPlaceInstance(game.PlaceId, sv.id, LocalPlayer)
+                end
+            end
+            Library:Notify({ Title = "Server hop", Description = "No other server found" })
+        end })
+    quick:AddButton({ Text = "Toggle watermark", Func = function()
+        local on = not (Library.WatermarkGui and Library.WatermarkGui.Enabled)
+        Library:SetWatermark(on, self.Config.Title, self.Config.GameName)
+        if Library.Options._ZeroWatermark then Library.Options._ZeroWatermark.Value = on end
+    end })
+
+    -- live status cards, refreshed every second
+    local status = tab:AddGroupbox("Status", "clock")
+    local cards = status:AddTable("Status", { Columns = 3, Rows = {
+        { "0s", "session" }, { "0", "features on" }, { "0", "fps" },
+        { "0 ms", "ping" }, { "0 / 0", "players" }, { self.ExpiresText or "lifetime", "key time" },
+    } })
+    local function since(sec)
+        sec = math.floor(sec)
+        if sec < 60 then return sec .. "s" end
+        if sec < 3600 then return string.format("%dm %02ds", sec // 60, sec % 60) end
+        return string.format("%dh %02dm", sec // 3600, sec % 3600 // 60)
+    end
+    task.spawn(function()
+        while self.Gui.Parent do
+            local on = 0
+            for flag, opt in Library.Options do
+                if opt.Type == "Toggle" and opt.Value and not flag:find("^_Zero") then on += 1 end
+            end
+            local ping = 0
+            pcall(function() ping = math.floor(StatsService.Network.ServerStatsItem["Data Ping"]:GetValue()) end)
+            cards:Set("session", since(os.clock() - Library.Started))
+            cards:Set("features on", on)
+            cards:Set("fps", math.floor(1 / RunService.RenderStepped:Wait()))
+            cards:Set("ping", ping .. " ms")
+            cards:Set("players", #Players:GetPlayers() .. " / " .. Players.MaxPlayers)
+            task.wait(1)
+        end
+    end)
+
+    if Options.Stats then
+        local stats = tab:AddGroupbox("Stats", "chart-bar")
+        local rows = {}
+        for _, st in Options.Stats do table.insert(rows, { st.Value or "-", st.Label }) end
+        local statCards = stats:AddTable("Stats", { Columns = 3, Rows = rows })
+        task.spawn(function()
+            while self.Gui.Parent do
+                for _, st in Options.Stats do
+                    if st.Get then local ok, v = pcall(st.Get) if ok then statCards:Set(st.Label, v) end end
+                end
+                task.wait(1)
+            end
+        end)
+    end
+
+    local acct = tab:AddGroupbox("Account", "key")
+    local keyRow = Create("Frame", { Size = UDim2.new(1, 0, 0, 20), BackgroundTransparency = 1, Parent = acct.Body })
+    Label({ Size = UDim2.new(0.5, 0, 1, 0), Text = "Key status", TextSize = 14, Theme = { TextColor3 = "Text" }, Parent = keyRow })
+    Label({ AnchorPoint = Vector2.new(1, 0), Position = UDim2.fromScale(1, 0), Size = UDim2.new(0.5, 0, 1, 0), Text = Options.KeyStatus or "Premium", FontFace = FONT.Bold, TextSize = 14, TextXAlignment = Enum.TextXAlignment.Right, Theme = { TextColor3 = "Accent" }, Parent = keyRow })
+    acct:AddButton({ Text = "Replace key", Func = function()
+        if Options.OnReplaceKey then pcall(Options.OnReplaceKey) else Library:Notify({ Title = "Account", Description = "Run the loader again with your new key." }) end
+    end })
+    return tab
 end
 
 -- ═══════════════════════════════════════════════════════════
